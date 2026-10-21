@@ -1,3 +1,4 @@
+
 package com.thesis.thesis_scheduler.entity;
 
 import jakarta.persistence.*;
@@ -7,11 +8,19 @@ import lombok.Setter;
 
 import java.time.OffsetDateTime;
 
-@NoArgsConstructor
+@Entity
+@Table(
+        name = "schedule_version",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_schedule_version_schedule_version",
+                        columnNames = {"generated_schedule_id", "version_number"}
+                )
+        }
+)
 @Getter
 @Setter
-@Entity
-@Table(name = "schedule_version")
+@NoArgsConstructor
 public class ScheduleVersion {
 
     @Id
@@ -19,27 +28,29 @@ public class ScheduleVersion {
     @Column(name = "schedule_version_id")
     private Long scheduleVersionId;
 
-    @Column(name = "generated_schedule_id")
-    private Long generatedScheduleId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "generated_schedule_id", nullable = false)
+    private GeneratedSchedule generatedSchedule;
 
-    @Column(name = "parent_version_id")
-    private Long parentVersionId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_version_id")
+    private ScheduleVersion parentVersion;
 
-    @Column(name = "version_number")
+    @Column(name = "version_number", nullable = false)
     private Integer versionNumber;
 
-    @Column(name = "version_type")
+    @Column(name = "version_type", nullable = false, length = 20)
     private String versionType;
 
-    @Column(name = "version_status")
+    @Column(name = "version_status", nullable = false, length = 20)
     private String versionStatus;
 
-    @Column(name = "change_summary")
+    @Column(name = "change_summary", columnDefinition = "text")
     private String changeSummary;
 
-    @Column(name = "created_by")
+    @Column(name = "created_by", length = 100)
     private String createdBy;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 }

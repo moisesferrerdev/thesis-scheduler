@@ -5,13 +5,22 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 
+@Entity
+@Table(
+        name = "subject",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_subject_subject_code",
+                        columnNames = "subject_code"
+                )
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor
-@Entity
-@Table(name = "subject")
 public class Subject {
 
     @Id
@@ -19,30 +28,30 @@ public class Subject {
     @Column(name = "subject_id")
     private Long subjectId;
 
-    @Column(name = "subject_code")
+    @Column(name = "subject_code", nullable = false, length = 30, unique = true)
     private String subjectCode;
 
-    @Column(name = "subject_name")
+    @Column(name = "subject_name", nullable = false, length = 150)
     private String subjectName;
 
-    @Column(name = "description")
+    @Column(name = "description", columnDefinition = "text")
     private String description;
 
-    @Column(name = "lecture_hours")
-    private int lectureHours;
+    @Column(name = "lecture_hours", nullable = false, precision = 4, scale = 1)
+    private BigDecimal lectureHours;
 
-    @Column(name = "laboratory_hours")
-    private int laboratoryHours;
+    @Column(name = "laboratory_hours", nullable = false, precision = 4, scale = 1)
+    private BigDecimal laboratoryHours;
 
-    @Column(name = "units")
-    private int units;
+    @Column(name = "units", nullable = false, precision = 4, scale = 1)
+    private BigDecimal units;
 
-    @Column(name = "status")
+    @Column(name = "status", nullable = false, length = 20)
     private String status;
 
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
+    @Column(name = "created_at", nullable = false)
+    private OffsetDateTime createdAt;
 
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
 }

@@ -1,3 +1,4 @@
+
 package com.thesis.thesis_scheduler.entity;
 
 import jakarta.persistence.*;
@@ -6,14 +7,13 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
-@NoArgsConstructor
-@Getter
-@Setter
 @Entity
 @Table(name = "optimization_run")
+@Getter
+@Setter
+@NoArgsConstructor
 public class OptimizationRun {
 
     @Id
@@ -21,36 +21,47 @@ public class OptimizationRun {
     @Column(name = "optimization_run_id")
     private Long optimizationRunId;
 
-    @Column(name = "term_id")
-    private Long termId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "term_id", nullable = false)
+    private AcademicTerm term;
 
-    @Column(name = "run_name")
+    @Column(name = "run_name", nullable = false, length = 100)
     private String runName;
 
-    @Column(name = "algorithm_name")
+    @Column(name = "algorithm_name", nullable = false, length = 50)
     private String algorithmName;
 
-    @Column(name = "population_size")
+    @Column(name = "population_size", nullable = false)
     private Integer populationSize;
 
-    @Column(name = "generation_limit")
+    @Column(name = "generation_limit", nullable = false)
     private Integer generationLimit;
 
-    @Column(name = "mutation_rate")
+    @Column(
+            name = "mutation_rate",
+            nullable = false,
+            precision = 6,
+            scale = 5
+    )
     private BigDecimal mutationRate;
 
-    @Column(name = "crossover_rate")
+    @Column(
+            name = "crossover_rate",
+            nullable = false,
+            precision = 6,
+            scale = 5
+    )
     private BigDecimal crossoverRate;
 
-    @Column(name = "run_status")
+    @Column(name = "run_status", nullable = false, length = 20)
     private String runStatus;
 
     @Column(name = "started_at")
-    private LocalDateTime startedAt;
+    private OffsetDateTime startedAt;
 
     @Column(name = "completed_at")
-    private LocalDateTime completedAt;
+    private OffsetDateTime completedAt;
 
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
+    @Column(name = "created_at", nullable = false)
+    private OffsetDateTime createdAt;
 }

@@ -1,3 +1,4 @@
+
 package com.thesis.thesis_scheduler.entity;
 
 import jakarta.persistence.*;
@@ -5,13 +6,21 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
-@NoArgsConstructor
+@Entity
+@Table(
+        name = "room",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_room_room_code",
+                        columnNames = "room_code"
+                )
+        }
+)
 @Getter
 @Setter
-@Entity
-@Table(name = "room")
+@NoArgsConstructor
 public class Room {
 
     @Id
@@ -19,27 +28,27 @@ public class Room {
     @Column(name = "room_id")
     private Long roomId;
 
-    @Column(name = "room_code")
+    @Column(name = "room_code", nullable = false, length = 30, unique = true)
     private String roomCode;
 
-    @Column(name = "room_name")
+    @Column(name = "room_name", length = 100)
     private String roomName;
 
-    @Column(name = "building")
+    @Column(name = "building", length = 100)
     private String building;
 
-    @Column(name = "room_type")
+    @Column(name = "room_type", nullable = false, length = 30)
     private String roomType;
 
-    @Column(name = "capacity")
-    private int capacity;
+    @Column(name = "capacity", nullable = false)
+    private Integer capacity;
 
-    @Column(name = "status")
+    @Column(name = "status", nullable = false, length = 20)
     private String status;
 
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
+    @Column(name = "created_at", nullable = false)
+    private OffsetDateTime createdAt;
 
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
 }

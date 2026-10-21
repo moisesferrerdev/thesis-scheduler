@@ -1,3 +1,4 @@
+
 package com.thesis.thesis_scheduler.entity;
 
 import jakarta.persistence.*;
@@ -5,13 +6,14 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 
-@NoArgsConstructor
-@Getter
-@Setter
 @Entity
 @Table(name = "teaching_assignment")
+@Getter
+@Setter
+@NoArgsConstructor
 public class TeachingAssignment {
 
     @Id
@@ -19,21 +21,28 @@ public class TeachingAssignment {
     @Column(name = "assignment_id")
     private Long assignmentId;
 
-    @Column(name = "section_subject_id")
-    private Long sectionSubjectId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "section_subject_id", nullable = false)
+    private SectionSubject sectionSubject;
 
-    @Column(name = "instructor_id")
-    private Long instructorId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "instructor_id", nullable = false)
+    private Instructor instructor;
 
-    @Column(name = "assigned_load_hours")
-    private int assignedLoadHours;
+    @Column(
+            name = "assigned_load_hours",
+            nullable = false,
+            precision = 5,
+            scale = 1
+    )
+    private BigDecimal assignedLoadHours;
 
-    @Column(name = "assignment_status")
+    @Column(name = "assignment_status", nullable = false, length = 20)
     private String assignmentStatus;
 
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
+    @Column(name = "created_at", nullable = false)
+    private OffsetDateTime createdAt;
 
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
 }

@@ -1,3 +1,4 @@
+
 package com.thesis.thesis_scheduler.entity;
 
 import jakarta.persistence.*;
@@ -5,13 +6,13 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
-@NoArgsConstructor
-@Getter
-@Setter
 @Entity
 @Table(name = "schedule_entry")
+@Getter
+@Setter
+@NoArgsConstructor
 public class ScheduleEntry {
 
     @Id
@@ -19,18 +20,22 @@ public class ScheduleEntry {
     @Column(name = "schedule_entry_id")
     private Long scheduleEntryId;
 
-    @Column(name = "schedule_version_id")
-    private Long scheduleVersionId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "schedule_version_id", nullable = false)
+    private ScheduleVersion scheduleVersion;
 
-    @Column(name = "assignment_id")
-    private Long assignmentId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "assignment_id", nullable = false)
+    private TeachingAssignment assignment;
 
-    @Column(name = "room_id")
-    private Long roomId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "room_id", nullable = false)
+    private Room room;
 
-    @Column(name = "timeslot_id")
-    private Long timeslotId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "timeslot_id", nullable = false)
+    private Timeslot timeslot;
 
-    @Column(name = "created_at")
-    private LocalDateTime createdAt;
+    @Column(name = "created_at", nullable = false)
+    private OffsetDateTime createdAt;
 }

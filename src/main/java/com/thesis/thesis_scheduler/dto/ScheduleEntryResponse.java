@@ -28,8 +28,8 @@ public class ScheduleEntryResponse {
 
     private Long timeslotId;
     private Short dayOfWeek;
-    private String startTime;
-    private String endTime;
+    private java.time.LocalTime startTime;
+    private java.time.LocalTime endTime;
     private String slotLabel;
 
     private OffsetDateTime createdAt;

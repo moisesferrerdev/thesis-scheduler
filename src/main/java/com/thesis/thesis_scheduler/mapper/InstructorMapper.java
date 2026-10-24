@@ -5,6 +5,7 @@ import com.thesis.thesis_scheduler.dto.InstructorResponse;
 import com.thesis.thesis_scheduler.entity.Instructor;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
 @Mapper(componentModel = "spring")
 public interface InstructorMapper {
@@ -15,4 +16,12 @@ public interface InstructorMapper {
     Instructor toEntity(InstructorRequest request);
 
     InstructorResponse toResponse(Instructor entity);
+
+    @Mapping(target = "instructorId", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    void updateEntity(
+            InstructorRequest request,
+            @MappingTarget Instructor entity
+    );
 }

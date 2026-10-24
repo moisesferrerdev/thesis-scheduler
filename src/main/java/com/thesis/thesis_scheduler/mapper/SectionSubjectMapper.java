@@ -6,6 +6,7 @@ import com.thesis.thesis_scheduler.dto.SectionSubjectResponse;
 import com.thesis.thesis_scheduler.entity.SectionSubject;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
 @Mapper(componentModel = "spring")
 public interface SectionSubjectMapper {
@@ -21,4 +22,13 @@ public interface SectionSubjectMapper {
     @Mapping(target = "offeringId", source = "offering.offeringId")
     @Mapping(target = "offeringCode", source = "offering.offeringCode")
     SectionSubjectResponse toResponse(SectionSubject entity);
+
+    @Mapping(target = "sectionSubjectId", ignore = true)
+    @Mapping(target = "section", ignore = true)
+    @Mapping(target = "offering", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    void updateEntity(
+            SectionSubjectRequest request,
+            @MappingTarget SectionSubject entity
+    );
 }

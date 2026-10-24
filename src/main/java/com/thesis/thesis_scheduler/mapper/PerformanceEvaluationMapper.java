@@ -5,6 +5,7 @@ import com.thesis.thesis_scheduler.dto.PerformanceEvaluationResponse;
 import com.thesis.thesis_scheduler.entity.PerformanceEvaluation;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
 @Mapper(componentModel = "spring")
 public interface PerformanceEvaluationMapper {
@@ -30,5 +31,14 @@ public interface PerformanceEvaluationMapper {
     )
     PerformanceEvaluationResponse toResponse(
             PerformanceEvaluation entity
+    );
+
+    @Mapping(target = "evaluationId", ignore = true)
+    @Mapping(target = "generatedSchedule", ignore = true)
+    @Mapping(target = "scheduleVersion", ignore = true)
+    @Mapping(target = "evaluatedAt", ignore = true)
+    void updateEntity(
+            PerformanceEvaluationRequest request,
+            @MappingTarget PerformanceEvaluation entity
     );
 }

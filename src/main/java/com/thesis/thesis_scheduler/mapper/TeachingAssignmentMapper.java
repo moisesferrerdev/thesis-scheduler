@@ -5,6 +5,7 @@ import com.thesis.thesis_scheduler.dto.TeachingAssignmentResponse;
 import com.thesis.thesis_scheduler.entity.TeachingAssignment;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
 @Mapper(componentModel = "spring")
 public interface TeachingAssignmentMapper {
@@ -35,4 +36,14 @@ public interface TeachingAssignmentMapper {
             expression = "java(entity.getInstructor().getFirstName() + \" \" + entity.getInstructor().getLastName())"
     )
     TeachingAssignmentResponse toResponse(TeachingAssignment entity);
+
+    @Mapping(target = "assignmentId", ignore = true)
+    @Mapping(target = "sectionSubject", ignore = true)
+    @Mapping(target = "instructor", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    void updateEntity(
+            TeachingAssignmentRequest request,
+            @MappingTarget TeachingAssignment entity
+    );
 }

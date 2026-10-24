@@ -5,6 +5,7 @@ import com.thesis.thesis_scheduler.dto.SchedulingConstraintResponse;
 import com.thesis.thesis_scheduler.entity.SchedulingConstraint;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
 @Mapper(componentModel = "spring")
 public interface SchedulingConstraintMapper {
@@ -23,5 +24,14 @@ public interface SchedulingConstraintMapper {
     @Mapping(target = "active", source = "active")
     SchedulingConstraintResponse toResponse(
             SchedulingConstraint entity
+    );
+
+    @Mapping(target = "constraintId", ignore = true)
+    @Mapping(target = "term", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    void updateEntity(
+            SchedulingConstraintRequest request,
+            @MappingTarget SchedulingConstraint entity
     );
 }

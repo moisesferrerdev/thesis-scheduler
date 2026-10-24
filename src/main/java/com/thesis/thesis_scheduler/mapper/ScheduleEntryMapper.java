@@ -5,6 +5,7 @@ import com.thesis.thesis_scheduler.dto.ScheduleEntryResponse;
 import com.thesis.thesis_scheduler.entity.ScheduleEntry;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
 @Mapper(componentModel = "spring")
 public interface ScheduleEntryMapper {
@@ -49,4 +50,15 @@ public interface ScheduleEntryMapper {
     @Mapping(target = "endTime", source = "timeslot.endTime")
     @Mapping(target = "slotLabel", source = "timeslot.slotLabel")
     ScheduleEntryResponse toResponse(ScheduleEntry entity);
+
+    @Mapping(target = "scheduleEntryId", ignore = true)
+    @Mapping(target = "scheduleVersion", ignore = true)
+    @Mapping(target = "assignment", ignore = true)
+    @Mapping(target = "room", ignore = true)
+    @Mapping(target = "timeslot", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    void updateEntity(
+            ScheduleEntryRequest request,
+            @MappingTarget ScheduleEntry entity
+    );
 }

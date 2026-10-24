@@ -5,6 +5,7 @@ import com.thesis.thesis_scheduler.dto.GeneratedScheduleResponse;
 import com.thesis.thesis_scheduler.entity.GeneratedSchedule;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
 @Mapper(componentModel = "spring")
 public interface GeneratedScheduleMapper {
@@ -23,4 +24,12 @@ public interface GeneratedScheduleMapper {
             source = "optimizationRun.optimizationRunId"
     )
     GeneratedScheduleResponse toResponse(GeneratedSchedule entity);
+
+    @Mapping(target = "generatedScheduleId", ignore = true)
+    @Mapping(target = "optimizationRun", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    void updateEntity(
+            GeneratedScheduleRequest request,
+            @MappingTarget GeneratedSchedule entity
+    );
 }

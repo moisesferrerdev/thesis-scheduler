@@ -5,6 +5,7 @@ import com.thesis.thesis_scheduler.dto.InstructorAvailabilityResponse;
 import com.thesis.thesis_scheduler.entity.InstructorAvailability;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
 @Mapper(componentModel = "spring")
 public interface InstructorAvailabilityMapper {
@@ -27,5 +28,14 @@ public interface InstructorAvailabilityMapper {
     @Mapping(target = "termName", source = "term.termName")
     InstructorAvailabilityResponse toResponse(
             InstructorAvailability entity
+    );
+
+    @Mapping(target = "availabilityId", ignore = true)
+    @Mapping(target = "instructor", ignore = true)
+    @Mapping(target = "term", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    void updateEntity(
+            InstructorAvailabilityRequest request,
+            @MappingTarget InstructorAvailability entity
     );
 }

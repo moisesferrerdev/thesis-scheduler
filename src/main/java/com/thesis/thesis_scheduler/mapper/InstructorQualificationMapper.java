@@ -5,6 +5,7 @@ import com.thesis.thesis_scheduler.dto.InstructorQualificationResponse;
 import com.thesis.thesis_scheduler.entity.InstructorQualification;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
 @Mapper(componentModel = "spring")
 public interface InstructorQualificationMapper {
@@ -30,5 +31,14 @@ public interface InstructorQualificationMapper {
     @Mapping(target = "approved", source = "approved")
     InstructorQualificationResponse toResponse(
             InstructorQualification entity
+    );
+
+    @Mapping(target = "qualificationId", ignore = true)
+    @Mapping(target = "instructor", ignore = true)
+    @Mapping(target = "subject", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    void updateEntity(
+            InstructorQualificationRequest request,
+            @MappingTarget InstructorQualification entity
     );
 }

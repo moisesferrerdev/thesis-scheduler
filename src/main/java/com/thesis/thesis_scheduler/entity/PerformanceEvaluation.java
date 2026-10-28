@@ -47,4 +47,11 @@ public class PerformanceEvaluation {
 
     @Column(name = "evaluated_at", nullable = false)
     private OffsetDateTime evaluatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (evaluatedAt == null) {
+            evaluatedAt = OffsetDateTime.now();
+        }
+    }
 }

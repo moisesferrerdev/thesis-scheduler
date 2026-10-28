@@ -23,7 +23,11 @@ public class TeachingAssignmentRequest {
     private Long instructorId;
 
     @NotNull
-    @DecimalMin("0.0")
+    @DecimalMin(
+            value = "0.0",
+            inclusive = false,
+            message = "Assigned load hours must be greater than zero"
+    )
     @Digits(integer = 4, fraction = 1)
     private BigDecimal assignedLoadHours;
 

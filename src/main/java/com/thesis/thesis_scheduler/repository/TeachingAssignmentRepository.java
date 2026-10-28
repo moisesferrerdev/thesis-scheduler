@@ -2,7 +2,10 @@ package com.thesis.thesis_scheduler.repository;
 
 import com.thesis.thesis_scheduler.entity.TeachingAssignment;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public interface TeachingAssignmentRepository
@@ -18,5 +21,17 @@ public interface TeachingAssignmentRepository
 
     List<TeachingAssignment> findByAssignmentStatus(
             String assignmentStatus
+    );
+
+    @Query("""
+    SELECT COALESCE(SUM(ta.assignedLoadHours), 0)
+    FROM TeachingAssignment ta
+    WHERE ta.instructor.instructorId = :instructorId
+      AND (:excludedAssignmentId IS NULL
+           OR ta.assignmentId <> :excludedAssignmentId)
+    """)
+    BigDecimal sumAssignedLoadHoursByInstructor(
+            @Param("instructorId") Long instructorId,
+            @Param("excludedAssignmentId") Long excludedAssignmentId
     );
 }

@@ -31,6 +31,8 @@ public class InstructorAvailabilityServiceImpl
     public InstructorAvailabilityResponse create(
             InstructorAvailabilityRequest request) {
 
+        validateAvailabilityType(request.getAvailabilityType());
+
         InstructorAvailability entity = mapper.toEntity(request);
         setRelationships(entity, request);
 
@@ -55,6 +57,8 @@ public class InstructorAvailabilityServiceImpl
     @Override
     public InstructorAvailabilityResponse update(
             Long id, InstructorAvailabilityRequest request) {
+
+        validateAvailabilityType(request.getAvailabilityType());
 
         InstructorAvailability existing = findById(id);
         mapper.updateEntity(request, existing);
@@ -89,5 +93,14 @@ public class InstructorAvailabilityServiceImpl
         return repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Instructor availability not found: " + id));
+    }
+
+    private void validateAvailabilityType(String availabilityType) {
+        if (availabilityType == null
+                || (!"AVAILABLE".equalsIgnoreCase(availabilityType)
+                && !"UNAVAILABLE".equalsIgnoreCase(availabilityType))) {
+            throw new IllegalArgumentException(
+                    "Availability type must be AVAILABLE or UNAVAILABLE.");
+        }
     }
 }

@@ -34,4 +34,18 @@ public interface TeachingAssignmentRepository
             @Param("instructorId") Long instructorId,
             @Param("excludedAssignmentId") Long excludedAssignmentId
     );
+
+
+    @Query("""
+    SELECT ta
+    FROM TeachingAssignment ta
+    JOIN ta.sectionSubject ss
+    JOIN ss.section sec
+    WHERE sec.academicTerm.termId = :termId
+      AND UPPER(ta.assignmentStatus) = 'ACTIVE'
+""")
+    List<TeachingAssignment> findActiveAssignmentsByTermId(
+            @Param("termId") Long termId
+    );
+
 }

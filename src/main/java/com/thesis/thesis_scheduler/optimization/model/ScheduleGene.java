@@ -1,4 +1,3 @@
-
 package com.thesis.thesis_scheduler.optimization.model;
 
 public class ScheduleGene {
@@ -8,6 +7,10 @@ public class ScheduleGene {
     private Long sectionId;
     private Long roomId;
     private Long timeslotId;
+
+    // Additional metadata for session generation.
+    private String sessionType;
+    private String sessionGroupId;
 
     public ScheduleGene() {
     }
@@ -63,5 +66,21 @@ public class ScheduleGene {
 
     public void setTimeslotId(Long timeslotId) {
         this.timeslotId = timeslotId;
+    }
+
+    public String getSessionType() {
+        return sessionType;
+    }
+
+    public void setSessionType(String sessionType) {
+        this.sessionType = sessionType;
+    }
+
+    public String getSessionGroupId() {
+        return sessionGroupId;
+    }
+
+    public void setSessionGroupId(String sessionGroupId) {
+        this.sessionGroupId = sessionGroupId;
     }
 }

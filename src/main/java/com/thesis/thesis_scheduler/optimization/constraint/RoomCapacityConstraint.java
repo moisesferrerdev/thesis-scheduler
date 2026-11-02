@@ -1,24 +1,28 @@
-
-package com.thesis.thesis_scheduler.optimization.constraint;
+ package com.thesis.thesis_scheduler.optimization.constraint;
 
 import com.thesis.thesis_scheduler.optimization.model.ScheduleChromosome;
 import com.thesis.thesis_scheduler.optimization.model.ScheduleGene;
+import org.springframework.stereotype.Component;
 
+@Component
 public class RoomCapacityConstraint {
 
     public boolean hasConflict(
             ScheduleChromosome chromosome,
             CapacityLookup capacityLookup) {
 
-        if (chromosome == null || chromosome.getGenes() == null) {
-            return false;
+        if (chromosome == null
+                || chromosome.getGenes() == null
+                || capacityLookup == null) {
+            return true;
         }
 
         for (ScheduleGene gene : chromosome.getGenes()) {
+
             if (gene == null
                     || gene.getRoomId() == null
                     || gene.getSectionId() == null) {
-                continue;
+                return true;
             }
 
             Integer roomCapacity =
@@ -27,9 +31,16 @@ public class RoomCapacityConstraint {
             Integer studentCount =
                     capacityLookup.getStudentCount(gene.getSectionId());
 
-            if (roomCapacity != null
-                    && studentCount != null
-                    && studentCount > roomCapacity) {
+            // Missing or invalid data must not pass the check.
+            if (roomCapacity == null
+                    || roomCapacity <= 0
+                    || studentCount == null
+                    || studentCount < 0) {
+                return true;
+            }
+
+            // A room must accommodate the entire section.
+            if (studentCount > roomCapacity) {
                 return true;
             }
         }

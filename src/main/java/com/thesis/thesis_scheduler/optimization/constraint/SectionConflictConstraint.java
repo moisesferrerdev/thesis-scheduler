@@ -3,10 +3,12 @@ package com.thesis.thesis_scheduler.optimization.constraint;
 
 import com.thesis.thesis_scheduler.optimization.model.ScheduleChromosome;
 import com.thesis.thesis_scheduler.optimization.model.ScheduleGene;
+import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
 import java.util.Set;
 
+@Component
 public class SectionConflictConstraint {
 
     public boolean hasConflict(ScheduleChromosome chromosome) {

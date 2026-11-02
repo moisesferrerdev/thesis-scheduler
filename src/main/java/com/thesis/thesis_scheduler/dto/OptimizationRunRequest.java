@@ -1,5 +1,7 @@
+
 package com.thesis.thesis_scheduler.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
@@ -45,4 +47,7 @@ public class OptimizationRunRequest {
     @DecimalMin("0.0")
     @DecimalMax("1.0")
     private BigDecimal crossoverRate;
+
+    @Valid
+    private OptimizationAdvancedSettings advancedSettings;
 }

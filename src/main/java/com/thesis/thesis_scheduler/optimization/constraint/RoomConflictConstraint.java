@@ -3,9 +3,11 @@ package com.thesis.thesis_scheduler.optimization.constraint;
 
 import com.thesis.thesis_scheduler.optimization.model.ScheduleChromosome;
 import com.thesis.thesis_scheduler.optimization.model.ScheduleGene;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+@Component
 public class RoomConflictConstraint {
 
     public boolean hasConflict(ScheduleChromosome chromosome) {

@@ -78,4 +78,12 @@ public class Instructor {
     protected void onUpdate() {
         updatedAt = OffsetDateTime.now();
     }
+
+    @Column(
+            name = "target_load_hours",
+            nullable = false,
+            precision = 5,
+            scale = 1
+    )
+    private BigDecimal targetLoadHours;
 }

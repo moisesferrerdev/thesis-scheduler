@@ -8,9 +8,11 @@ import com.thesis.thesis_scheduler.optimization.model.ScheduleGene;
 import com.thesis.thesis_scheduler.repository.InstructorAvailabilityRepository;
 import com.thesis.thesis_scheduler.repository.TimeslotRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+@Component
 @RequiredArgsConstructor
 public class InstructorAvailabilityConstraint {
 

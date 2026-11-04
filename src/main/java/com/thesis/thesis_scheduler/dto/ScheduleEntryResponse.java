@@ -32,5 +32,7 @@ public class ScheduleEntryResponse {
     private java.time.LocalTime endTime;
     private String slotLabel;
 
+    private String sessionType;
+
     private OffsetDateTime createdAt;
 }

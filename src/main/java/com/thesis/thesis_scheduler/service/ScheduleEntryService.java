@@ -18,4 +18,7 @@ public interface ScheduleEntryService {
             ScheduleEntryRequest request);
 
     void delete(Long id);
+
+    List<ScheduleEntryResponse> getByScheduleVersionId(
+            Long scheduleVersionId);
 }

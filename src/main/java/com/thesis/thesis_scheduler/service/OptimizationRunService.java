@@ -18,4 +18,6 @@ public interface OptimizationRunService {
             OptimizationRunRequest request);
 
     void delete(Long id);
+
+    List<OptimizationRunResponse> getByTerm(Long termId);
 }

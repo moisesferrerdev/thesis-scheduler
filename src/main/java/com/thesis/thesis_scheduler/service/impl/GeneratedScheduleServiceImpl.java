@@ -75,4 +75,21 @@ public class GeneratedScheduleServiceImpl
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Generated schedule not found: " + id));
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<GeneratedScheduleResponse> getByOptimizationRunId(
+            Long optimizationRunId) {
+
+        if (!optimizationRunRepository.existsById(optimizationRunId)) {
+            throw new EntityNotFoundException(
+                    "Optimization run not found: " + optimizationRunId);
+        }
+
+        return repository
+                .findByOptimizationRun_OptimizationRunId(optimizationRunId)
+                .stream()
+                .map(mapper::toResponse)
+                .toList();
+    }
 }

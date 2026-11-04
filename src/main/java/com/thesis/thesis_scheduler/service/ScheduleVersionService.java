@@ -1,6 +1,7 @@
 
 package com.thesis.thesis_scheduler.service;
 
+import com.thesis.thesis_scheduler.dto.ManualScheduleVersionRequest;
 import com.thesis.thesis_scheduler.dto.ScheduleVersionRequest;
 import com.thesis.thesis_scheduler.dto.ScheduleVersionResponse;
 import java.util.List;
@@ -18,4 +19,10 @@ public interface ScheduleVersionService {
             ScheduleVersionRequest request);
 
     void delete(Long id);
+
+    List<ScheduleVersionResponse> getByGeneratedScheduleId(
+            Long generatedScheduleId);
+
+    ScheduleVersionResponse createManualVersion(
+            ManualScheduleVersionRequest request);
 }

@@ -45,4 +45,7 @@ public class ScheduleEntry {
             createdAt = OffsetDateTime.now();
         }
     }
+
+    @Column(name = "session_type", nullable = false, length = 20)
+    private String sessionType;
 }

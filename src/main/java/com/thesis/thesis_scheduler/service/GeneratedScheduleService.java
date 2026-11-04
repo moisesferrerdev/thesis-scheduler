@@ -18,4 +18,7 @@ public interface GeneratedScheduleService {
             GeneratedScheduleRequest request);
 
     void delete(Long id);
+
+    List<GeneratedScheduleResponse> getByOptimizationRunId(
+            Long optimizationRunId);
 }

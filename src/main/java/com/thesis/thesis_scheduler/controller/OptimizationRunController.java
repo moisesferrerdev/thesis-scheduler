@@ -1,8 +1,10 @@
 
 package com.thesis.thesis_scheduler.controller;
 
+import com.thesis.thesis_scheduler.dto.GeneratedScheduleResponse;
 import com.thesis.thesis_scheduler.dto.OptimizationRunRequest;
 import com.thesis.thesis_scheduler.dto.OptimizationRunResponse;
+import com.thesis.thesis_scheduler.service.GeneratedScheduleService;
 import com.thesis.thesis_scheduler.service.OptimizationRunService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +19,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OptimizationRunController {
 
+    private final GeneratedScheduleService generatedScheduleService;
     private final OptimizationRunService service;
 
     @PostMapping
@@ -26,7 +29,7 @@ public class OptimizationRunController {
         OptimizationRunResponse response = service.create(request);
 
         return ResponseEntity
-                .status(HttpStatus.CREATED)
+                .status(HttpStatus.ACCEPTED)
                 .body(response);
     }
 
@@ -57,5 +60,21 @@ public class OptimizationRunController {
         service.delete(id);
 
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/term/{termId}")
+    public ResponseEntity<List<OptimizationRunResponse>> getByTerm(
+            @PathVariable Long termId) {
+
+        return ResponseEntity.ok(service.getByTerm(termId));
+    }
+
+    @GetMapping("/{id}/schedules")
+    public ResponseEntity<List<GeneratedScheduleResponse>> getGeneratedSchedules(
+            @PathVariable Long id) {
+
+        return ResponseEntity.ok(
+                generatedScheduleService.getByOptimizationRunId(id)
+        );
     }
 }

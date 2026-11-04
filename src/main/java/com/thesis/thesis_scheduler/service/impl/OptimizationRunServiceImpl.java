@@ -5,6 +5,7 @@ import com.thesis.thesis_scheduler.dto.OptimizationRunRequest;
 import com.thesis.thesis_scheduler.dto.OptimizationRunResponse;
 import com.thesis.thesis_scheduler.entity.OptimizationRun;
 import com.thesis.thesis_scheduler.mapper.OptimizationRunMapper;
+import com.thesis.thesis_scheduler.optimization.service.OptimizationExecutionService;
 import com.thesis.thesis_scheduler.repository.AcademicTermRepository;
 import com.thesis.thesis_scheduler.repository.OptimizationRunRepository;
 import com.thesis.thesis_scheduler.service.OptimizationRunService;
@@ -20,21 +21,18 @@ import java.util.List;
 @Transactional
 public class OptimizationRunServiceImpl implements OptimizationRunService {
 
+    private final OptimizationExecutionService optimizationExecutionService;
     private final OptimizationRunRepository repository;
     private final AcademicTermRepository academicTermRepository;
     private final OptimizationRunMapper mapper;
 
     @Override
     public OptimizationRunResponse create(OptimizationRunRequest request) {
-        OptimizationRun entity = mapper.toEntity(request);
 
-        entity.setTerm(
-                academicTermRepository.findById(request.getTermId())
-                        .orElseThrow(() -> new EntityNotFoundException(
-                                "Academic term not found: "
-                                        + request.getTermId())));
+        OptimizationRun savedRun =
+                optimizationExecutionService.startOptimization(request);
 
-        return mapper.toResponse(repository.save(entity));
+        return mapper.toResponse(savedRun);
     }
 
     @Override
@@ -75,5 +73,14 @@ public class OptimizationRunServiceImpl implements OptimizationRunService {
         return repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Optimization run not found: " + id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OptimizationRunResponse> getByTerm(Long termId) {
+        return repository.findByTerm_TermId(termId)
+                .stream()
+                .map(mapper::toResponse)
+                .toList();
     }
 }

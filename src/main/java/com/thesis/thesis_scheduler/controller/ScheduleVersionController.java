@@ -1,6 +1,7 @@
 
 package com.thesis.thesis_scheduler.controller;
 
+import com.thesis.thesis_scheduler.dto.ManualScheduleVersionRequest;
 import com.thesis.thesis_scheduler.dto.ScheduleVersionRequest;
 import com.thesis.thesis_scheduler.dto.ScheduleVersionResponse;
 import com.thesis.thesis_scheduler.service.ScheduleVersionService;
@@ -41,5 +42,25 @@ public class ScheduleVersionController {
     public ResponseEntity<List<ScheduleVersionResponse>> getAll() {
 
         return ResponseEntity.ok(service.getAll());
+    }
+
+    @GetMapping("/generated-schedule/{generatedScheduleId}")
+    public ResponseEntity<List<ScheduleVersionResponse>> getByGeneratedScheduleId(
+            @PathVariable Long generatedScheduleId) {
+
+        return ResponseEntity.ok(
+                service.getByGeneratedScheduleId(generatedScheduleId));
+    }
+
+    @PostMapping("/manual")
+    public ResponseEntity<ScheduleVersionResponse> createManualVersion(
+            @Valid @RequestBody ManualScheduleVersionRequest request) {
+
+        ScheduleVersionResponse response =
+                service.createManualVersion(request);
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(response);
     }
 }

@@ -14,6 +14,8 @@ public interface SectionSubjectMapper {
     @Mapping(target = "sectionSubjectId", ignore = true)
     @Mapping(target = "section", ignore = true)
     @Mapping(target = "offering", ignore = true)
+    @Mapping(target = "requiredLectureHours", ignore = true)
+    @Mapping(target = "requiredLabHours", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     SectionSubject toEntity(SectionSubjectRequest request);
 
@@ -26,6 +28,8 @@ public interface SectionSubjectMapper {
     @Mapping(target = "sectionSubjectId", ignore = true)
     @Mapping(target = "section", ignore = true)
     @Mapping(target = "offering", ignore = true)
+    @Mapping(target = "requiredLectureHours", ignore = true)
+    @Mapping(target = "requiredLabHours", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     void updateEntity(
             SectionSubjectRequest request,

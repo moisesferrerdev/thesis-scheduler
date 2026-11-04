@@ -54,15 +54,22 @@ public class ScheduleEntryServiceImpl implements ScheduleEntryService {
     @Override
     public ScheduleEntryResponse update(
             Long id, ScheduleEntryRequest request) {
-        ScheduleEntry existing = findById(id);
-        mapper.updateEntity(request, existing);
-        setRelationships(existing, request);
-        return mapper.toResponse(repository.save(existing));
+
+        findById(id);
+
+        throw new UnsupportedOperationException(
+                "Schedule entries are immutable. "
+                        + "Create a new schedule version instead.");
     }
 
     @Override
     public void delete(Long id) {
-        repository.delete(findById(id));
+
+        findById(id);
+
+        throw new UnsupportedOperationException(
+                "Schedule entries cannot be deleted. "
+                        + "Create a new schedule version instead.");
     }
 
     private void setRelationships(
@@ -98,5 +105,22 @@ public class ScheduleEntryServiceImpl implements ScheduleEntryService {
         return repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Schedule entry not found: " + id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ScheduleEntryResponse> getByScheduleVersionId(
+            Long scheduleVersionId) {
+
+        if (!scheduleVersionRepository.existsById(scheduleVersionId)) {
+            throw new EntityNotFoundException(
+                    "Schedule version not found: " + scheduleVersionId);
+        }
+
+        return repository
+                .findByScheduleVersion_ScheduleVersionId(scheduleVersionId)
+                .stream()
+                .map(mapper::toResponse)
+                .toList();
     }
 }

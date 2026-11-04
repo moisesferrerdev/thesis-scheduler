@@ -42,4 +42,12 @@ public class ScheduleEntryController {
 
         return ResponseEntity.ok(service.getAll());
     }
+
+    @GetMapping("/schedule-version/{scheduleVersionId}")
+    public ResponseEntity<List<ScheduleEntryResponse>> getByScheduleVersionId(
+            @PathVariable Long scheduleVersionId) {
+
+        return ResponseEntity.ok(
+                service.getByScheduleVersionId(scheduleVersionId));
+    }
 }

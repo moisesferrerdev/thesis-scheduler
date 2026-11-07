@@ -4,8 +4,12 @@ package com.thesis.thesis_scheduler.service.impl;
 import com.thesis.thesis_scheduler.dto.CurriculumRequest;
 import com.thesis.thesis_scheduler.dto.CurriculumResponse;
 import com.thesis.thesis_scheduler.entity.Curriculum;
+import com.thesis.thesis_scheduler.entity.Program;
+import com.thesis.thesis_scheduler.entity.ProgramMajor;
+import com.thesis.thesis_scheduler.entity.Subject;
 import com.thesis.thesis_scheduler.mapper.CurriculumMapper;
 import com.thesis.thesis_scheduler.repository.CurriculumRepository;
+import com.thesis.thesis_scheduler.repository.ProgramMajorRepository;
 import com.thesis.thesis_scheduler.repository.ProgramRepository;
 import com.thesis.thesis_scheduler.repository.SubjectRepository;
 import com.thesis.thesis_scheduler.service.CurriculumService;
@@ -25,6 +29,7 @@ public class CurriculumServiceImpl implements CurriculumService {
     private final ProgramRepository programRepository;
     private final SubjectRepository subjectRepository;
     private final CurriculumMapper curriculumMapper;
+    private final ProgramMajorRepository programMajorRepository;
 
     @Override
     public CurriculumResponse create(CurriculumRequest request) {
@@ -68,24 +73,46 @@ public class CurriculumServiceImpl implements CurriculumService {
 
     private void setRelationships(
             Curriculum curriculum,
-            CurriculumRequest request) {
+            CurriculumRequest request
+    ) {
+        Program program = programRepository.findById(request.getProgramId())
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Program not found: " + request.getProgramId()
+                ));
 
-        curriculum.setProgram(
-                programRepository.findById(request.getProgramId())
-                        .orElseThrow(() -> new EntityNotFoundException(
-                                "Program not found: "
-                                        + request.getProgramId())));
+        Subject subject = subjectRepository.findById(request.getSubjectId())
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Subject not found: " + request.getSubjectId()
+                ));
 
-        curriculum.setSubject(
-                subjectRepository.findById(request.getSubjectId())
-                        .orElseThrow(() -> new EntityNotFoundException(
-                                "Subject not found: "
-                                        + request.getSubjectId())));
+        curriculum.setProgram(program);
+        curriculum.setSubject(subject);
+
+        if (request.getProgramMajorId() != null) {
+            ProgramMajor programMajor = programMajorRepository
+                    .findById(request.getProgramMajorId())
+                    .orElseThrow(() -> new EntityNotFoundException(
+                            "Program Major not found: "
+                                    + request.getProgramMajorId()
+                    ));
+
+            if (!programMajor.getProgram().getProgramId()
+                    .equals(program.getProgramId())) {
+                throw new IllegalArgumentException(
+                        "The selected Program Major does not belong to the selected Program."
+                );
+            }
+
+            curriculum.setProgramMajor(programMajor);
+        } else {
+            curriculum.setProgramMajor(null);
+        }
     }
 
     private Curriculum findById(Long id) {
         return curriculumRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "Curriculum not found: " + id));
+                        "Curriculum not found: " + id
+                ));
     }
 }

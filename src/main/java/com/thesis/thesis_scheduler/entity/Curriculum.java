@@ -8,19 +8,7 @@ import lombok.Setter;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(
-        name = "curriculum",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uk_curriculum_program_subject_year",
-                        columnNames = {
-                                "program_id",
-                                "subject_id",
-                                "curriculum_year"
-                        }
-                )
-        }
-)
+@Table(name = "curriculum")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -38,6 +26,10 @@ public class Curriculum {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "subject_id", nullable = false)
     private Subject subject;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "program_major_id", nullable = true)
+    private ProgramMajor programMajor;
 
     @Column(name = "curriculum_year", nullable = false, length = 20)
     private String curriculumYear;

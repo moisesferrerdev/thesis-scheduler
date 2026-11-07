@@ -15,6 +15,8 @@ public class CurriculumRequest {
     @NotNull
     private Long programId;
 
+    private Long programMajorId;
+
     @NotNull
     private Long subjectId;
 

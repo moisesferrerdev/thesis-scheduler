@@ -19,6 +19,10 @@ public class CurriculumResponse {
     private String programCode;
     private String programName;
 
+    private Long programMajorId;
+    private String majorCode;
+    private String majorName;
+
     private Long subjectId;
     private String subjectCode;
     private String subjectName;

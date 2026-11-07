@@ -35,6 +35,10 @@ public class StudentSection {
     @JoinColumn(name = "program_id", nullable = false)
     private Program program;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "program_major_id", nullable = true)
+    private ProgramMajor programMajor;
+
     @Column(name = "section_code", nullable = false, length = 30)
     private String sectionCode;
 

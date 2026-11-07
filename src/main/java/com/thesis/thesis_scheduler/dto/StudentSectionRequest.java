@@ -19,6 +19,8 @@ public class StudentSectionRequest {
     @NotNull
     private Long programId;
 
+    private Long programMajorId;
+
     @NotBlank
     @Size(max = 30)
     private String sectionCode;

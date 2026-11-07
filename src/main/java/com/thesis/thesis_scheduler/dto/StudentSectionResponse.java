@@ -22,6 +22,10 @@ public class StudentSectionResponse {
     private String programCode;
     private String programName;
 
+    private Long programMajorId;
+    private String majorCode;
+    private String majorName;
+
     private String sectionCode;
     private Short yearLevel;
     private Integer studentCount;

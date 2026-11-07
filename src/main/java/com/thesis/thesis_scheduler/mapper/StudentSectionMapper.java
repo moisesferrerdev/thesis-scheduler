@@ -22,6 +22,9 @@ public interface StudentSectionMapper {
     @Mapping(target = "programId", source = "program.programId")
     @Mapping(target = "programCode", source = "program.programCode")
     @Mapping(target = "programName", source = "program.programName")
+    @Mapping(target = "programMajorId", source = "programMajor.programMajorId")
+    @Mapping(target = "majorCode", source = "programMajor.majorCode")
+    @Mapping(target = "majorName", source = "programMajor.majorName")
     StudentSectionResponse toResponse(StudentSection entity);
 
     @Mapping(target = "sectionId", ignore = true)

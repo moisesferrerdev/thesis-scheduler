@@ -1,4 +1,3 @@
-
 package com.thesis.thesis_scheduler.service.impl;
 
 import com.thesis.thesis_scheduler.dto.InstructorRequest;
@@ -13,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -24,9 +24,20 @@ public class InstructorServiceImpl implements InstructorService {
 
     @Override
     public InstructorResponse create(InstructorRequest request) {
+
+        validateLoadHours(request);
+
         Instructor instructor = instructorMapper.toEntity(request);
+
+        Long nextNumber = instructorRepository.getNextEmployeeNumber();
+
+        instructor.setEmployeeNo(
+                String.format(Locale.ROOT, "EMP-%04d", nextNumber)
+        );
+
         return instructorMapper.toResponse(
-                instructorRepository.save(instructor));
+                instructorRepository.save(instructor)
+        );
     }
 
     @Override
@@ -46,11 +57,16 @@ public class InstructorServiceImpl implements InstructorService {
 
     @Override
     public InstructorResponse update(Long id, InstructorRequest request) {
+
+        validateLoadHours(request);
+
         Instructor existing = findById(id);
+
         instructorMapper.updateEntity(request, existing);
 
         return instructorMapper.toResponse(
-                instructorRepository.save(existing));
+                instructorRepository.save(existing)
+        );
     }
 
     @Override
@@ -62,5 +78,17 @@ public class InstructorServiceImpl implements InstructorService {
         return instructorRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Instructor not found: " + id));
+    }
+
+    private void validateLoadHours(InstructorRequest request) {
+
+        if (request.getTargetLoadHours() != null
+                && request.getTargetLoadHours()
+                .compareTo(request.getMaxLoadHours()) > 0) {
+
+            throw new IllegalArgumentException(
+                    "Target Load Hours cannot exceed Maximum Load Hours."
+            );
+        }
     }
 }

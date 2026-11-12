@@ -17,10 +17,6 @@ import java.math.BigDecimal;
 public class InstructorRequest {
 
     @NotBlank
-    @Size(max = 30)
-    private String employeeNo;
-
-    @NotBlank
     @Size(max = 100)
     private String firstName;
 
@@ -43,4 +39,8 @@ public class InstructorRequest {
     @NotBlank
     @Size(max = 20)
     private String status;
+
+    @DecimalMin("0.0")
+    @Digits(integer = 4, fraction = 1)
+    private BigDecimal targetLoadHours;
 }

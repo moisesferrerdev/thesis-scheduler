@@ -23,6 +23,7 @@ public class InstructorResponse {
 
     private String employmentType;
     private BigDecimal maxLoadHours;
+    private BigDecimal targetLoadHours;
     private String status;
 
     private OffsetDateTime createdAt;

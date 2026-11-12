@@ -11,6 +11,7 @@ import org.mapstruct.MappingTarget;
 public interface InstructorMapper {
 
     @Mapping(target = "instructorId", ignore = true)
+    @Mapping(target = "employeeNo", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     Instructor toEntity(InstructorRequest request);
@@ -18,6 +19,7 @@ public interface InstructorMapper {
     InstructorResponse toResponse(Instructor entity);
 
     @Mapping(target = "instructorId", ignore = true)
+    @Mapping(target = "employeeNo", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     void updateEntity(

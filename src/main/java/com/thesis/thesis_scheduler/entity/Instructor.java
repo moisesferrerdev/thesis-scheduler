@@ -46,7 +46,7 @@ public class Instructor {
 
     @Column(
             name = "max_load_hours",
-            nullable = false,
+            nullable = true,
             precision = 5,
             scale = 1
     )

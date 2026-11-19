@@ -1,4 +1,3 @@
-
 package com.thesis.thesis_scheduler.entity;
 
 import jakarta.persistence.*;
@@ -39,6 +38,10 @@ public class Room {
 
     @Column(name = "room_type", nullable = false, length = 30)
     private String roomType;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "classification_id")
+    private RoomClassification classification;
 
     @Column(name = "capacity", nullable = false)
     private Integer capacity;

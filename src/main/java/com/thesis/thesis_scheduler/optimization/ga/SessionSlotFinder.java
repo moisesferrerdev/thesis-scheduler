@@ -40,10 +40,10 @@ public class SessionSlotFinder {
 
         if (dayOfWeek == null
                 || dayOfWeek < 1
-                || dayOfWeek > 6) {
+                || dayOfWeek > 7) {
             throw new IllegalArgumentException(
                     "Day of week must be between 1 (Monday) "
-                            + "and 6 (Saturday).");
+                            + "and 7 (Sunday).");
         }
 
         if (durationMinutes <= 0

@@ -19,6 +19,10 @@ public class RoomResponse {
     private String roomName;
     private String building;
     private String roomType;
+
+    private Long classificationId;
+    private String classificationName;
+
     private Integer capacity;
     private String status;
 

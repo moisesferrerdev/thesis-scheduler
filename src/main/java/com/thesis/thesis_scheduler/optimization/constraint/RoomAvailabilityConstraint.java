@@ -16,7 +16,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RoomAvailabilityConstraint {
 
-    private static final String AVAILABLE = "AVAILABLE";
     private static final String UNAVAILABLE = "UNAVAILABLE";
 
     private final RoomAvailabilityRepository availabilityRepository;
@@ -35,9 +34,11 @@ public class RoomAvailabilityConstraint {
         }
 
         for (ScheduleGene gene : chromosome.getGenes()) {
+
             if (gene == null
                     || gene.getRoomId() == null
                     || gene.getTimeslotId() == null) {
+
                 continue;
             }
 
@@ -47,44 +48,41 @@ public class RoomAvailabilityConstraint {
 
             if (timeslot == null
                     || timeslot.getTerm() == null
-                    || !termId.equals(timeslot.getTerm().getTermId())) {
+                    || !termId.equals(
+                    timeslot.getTerm().getTermId())) {
+
                 return true;
             }
 
             List<RoomAvailability> records =
                     availabilityRepository
                             .findByRoom_RoomIdAndTerm_TermId(
-                                    gene.getRoomId(), termId);
+                                    gene.getRoomId(),
+                                    termId
+                            );
 
             List<RoomAvailability> sameDayRecords =
                     records.stream()
                             .filter(record ->
                                     record.getDayOfWeek() != null
                                             && record.getDayOfWeek()
-                                            .equals(timeslot.getDayOfWeek()))
+                                            .equals(
+                                                    timeslot.getDayOfWeek()
+                                            ))
                             .toList();
 
-            boolean hasAvailableWindow = sameDayRecords.stream()
-                    .filter(record -> AVAILABLE.equalsIgnoreCase(
-                            record.getAvailabilityType()))
-                    .anyMatch(record ->
-                            !timeslot.getStartTime()
-                                    .isBefore(record.getStartTime())
-                                    && !timeslot.getEndTime()
-                                    .isAfter(record.getEndTime()));
-
-            if (!hasAvailableWindow) {
-                return true;
-            }
-
-            boolean overlapsUnavailableWindow = sameDayRecords.stream()
-                    .filter(record -> UNAVAILABLE.equalsIgnoreCase(
-                            record.getAvailabilityType()))
-                    .anyMatch(record ->
-                            timeslot.getStartTime()
-                                    .isBefore(record.getEndTime())
-                                    && timeslot.getEndTime()
-                                    .isAfter(record.getStartTime()));
+            boolean overlapsUnavailableWindow =
+                    sameDayRecords.stream()
+                            .filter(record ->
+                                    UNAVAILABLE.equalsIgnoreCase(
+                                            record.getAvailabilityType()
+                                    ))
+                            .anyMatch(record ->
+                                    timeslot.getStartTime()
+                                            .isBefore(record.getEndTime())
+                                            && timeslot.getEndTime()
+                                            .isAfter(record.getStartTime())
+                            );
 
             if (overlapsUnavailableWindow) {
                 return true;

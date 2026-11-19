@@ -16,6 +16,8 @@ import java.time.OffsetDateTime;
 public class SubjectResponse {
 
     private Long subjectId;
+    private Long requiredLaboratoryClassificationId;
+    private String requiredLaboratoryClassificationName;
     private String subjectCode;
     private String subjectName;
     private String description;

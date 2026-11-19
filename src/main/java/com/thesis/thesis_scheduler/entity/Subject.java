@@ -28,6 +28,10 @@ public class Subject {
     @Column(name = "subject_id")
     private Long subjectId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "required_laboratory_classification_id")
+    private RoomClassification requiredLaboratoryClassification;
+
     @Column(name = "subject_code", nullable = false, length = 30, unique = true)
     private String subjectCode;
 

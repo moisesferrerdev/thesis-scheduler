@@ -20,6 +20,7 @@ import java.util.List;
 public class ConstraintEvaluator {
 
     private final InstructorAvailabilityRepository instructorAvailabilityRepository;
+    private final RoomClassificationConstraint roomClassificationConstraint;
     private final RoomAvailabilityRepository roomAvailabilityRepository;
     private final TimeslotRepository timeslotRepository;
     private final TeachingAssignmentRepository teachingAssignmentRepository;
@@ -45,10 +46,10 @@ public class ConstraintEvaluator {
 
         List<ConstraintViolation> violations = new ArrayList<>();
 
-        if (roomConflictConstraint.hasConflict(chromosome)) {
+        if (roomClassificationConstraint.hasConflict(chromosome)) {
             violations.add(new ConstraintViolation(
-                    "ROOM_CONFLICT",
-                    "Multiple assignments use the same room and timeslot.",
+                    "ROOM_CLASSIFICATION",
+                    "A scheduled session uses a room with an incompatible or inactive classification.",
                     1
             ));
         }

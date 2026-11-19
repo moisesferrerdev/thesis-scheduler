@@ -28,6 +28,9 @@ public class RoomRequest {
     private String roomType;
 
     @NotNull
+    private Long classificationId;
+
+    @NotNull
     @Min(1)
     private Integer capacity;
 

@@ -11,13 +11,23 @@ import org.mapstruct.MappingTarget;
 public interface RoomMapper {
 
     @Mapping(target = "roomId", ignore = true)
+    @Mapping(target = "classification", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     Room toEntity(RoomRequest request);
 
+    @Mapping(
+            target = "classificationId",
+            source = "classification.classificationId"
+    )
+    @Mapping(
+            target = "classificationName",
+            source = "classification.classificationName"
+    )
     RoomResponse toResponse(Room entity);
 
     @Mapping(target = "roomId", ignore = true)
+    @Mapping(target = "classification", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     void updateEntity(

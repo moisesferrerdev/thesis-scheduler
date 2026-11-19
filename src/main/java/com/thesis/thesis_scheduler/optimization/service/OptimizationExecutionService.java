@@ -8,6 +8,7 @@ import com.thesis.thesis_scheduler.optimization.ga.GeneticAlgorithmOptimizer;
 import com.thesis.thesis_scheduler.optimization.service.OptimizationSettingsResolver.ResolvedOptimizationSettings;
 import com.thesis.thesis_scheduler.repository.AcademicTermRepository;
 import com.thesis.thesis_scheduler.repository.OptimizationRunRepository;
+import lombok.extern.slf4j.Slf4j;
 
 import lombok.RequiredArgsConstructor;
 
@@ -19,6 +20,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.OffsetDateTime;
 import java.util.concurrent.CompletableFuture;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OptimizationExecutionService {
@@ -98,6 +100,7 @@ public class OptimizationExecutionService {
         return savedRun;
     }
 
+
     private void executeAndPersist(
             Long runId,
             OptimizationRunRequest request,
@@ -121,19 +124,52 @@ public class OptimizationExecutionService {
 
             future.whenComplete((result, throwable) -> {
 
-                if (throwable != null || result == null) {
+                if (throwable != null) {
+
+                    log.error(
+                            "Genetic Algorithm execution failed. Run ID: {}",
+                            runId,
+                            throwable
+                    );
+
+                    updateRunStatus(runId, STATUS_FAILED);
+                    return;
+                }
+
+                if (result == null) {
+
+                    log.error(
+                            "Genetic Algorithm returned a null result. Run ID: {}",
+                            runId
+                    );
+
                     updateRunStatus(runId, STATUS_FAILED);
                     return;
                 }
 
                 try {
-                    // 6. Save generated schedule and its entries.
+
+                    log.info(
+                            "Genetic Algorithm completed. Persisting result. Run ID: {}",
+                            runId
+                    );
+
                     persistenceService.saveBestResult(runId, result);
 
-                    // 7. Mark optimization as completed.
                     updateRunStatus(runId, STATUS_COMPLETED);
 
+                    log.info(
+                            "Optimization completed successfully. Run ID: {}",
+                            runId
+                    );
+
                 } catch (RuntimeException exception) {
+
+                    log.error(
+                            "Failed to persist optimization result. Run ID: {}",
+                            runId,
+                            exception
+                    );
 
                     updateRunStatus(runId, STATUS_FAILED);
                 }
@@ -141,9 +177,16 @@ public class OptimizationExecutionService {
 
         } catch (RuntimeException exception) {
 
+            log.error(
+                    "Failed to start optimization execution. Run ID: {}",
+                    runId,
+                    exception
+            );
+
             updateRunStatus(runId, STATUS_FAILED);
         }
     }
+
 
     private void updateRunStatus(Long runId, String status) {
 

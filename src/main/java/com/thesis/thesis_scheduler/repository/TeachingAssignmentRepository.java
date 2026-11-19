@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 public interface TeachingAssignmentRepository
         extends JpaRepository<TeachingAssignment, Long> {
@@ -36,16 +37,35 @@ public interface TeachingAssignmentRepository
     );
 
 
+
     @Query("""
     SELECT ta
     FROM TeachingAssignment ta
-    JOIN ta.sectionSubject ss
-    JOIN ss.section sec
-    WHERE sec.academicTerm.termId = :termId
+    JOIN FETCH ta.instructor instructor
+    JOIN FETCH ta.sectionSubject ss
+    JOIN FETCH ss.section section
+    JOIN FETCH ss.offering offering
+    JOIN FETCH offering.subject subject
+    LEFT JOIN FETCH subject.requiredLaboratoryClassification
+    WHERE section.academicTerm.termId = :termId
       AND UPPER(ta.assignmentStatus) = 'ACTIVE'
 """)
     List<TeachingAssignment> findActiveAssignmentsByTermId(
             @Param("termId") Long termId
+    );
+
+
+    @Query("""
+    SELECT ta
+    FROM TeachingAssignment ta
+    JOIN FETCH ta.sectionSubject ss
+    JOIN FETCH ss.offering offering
+    JOIN FETCH offering.subject subject
+    LEFT JOIN FETCH subject.requiredLaboratoryClassification
+    WHERE ta.assignmentId = :assignmentId
+""")
+    Optional<TeachingAssignment> findWithSubjectById(
+            @Param("assignmentId") Long assignmentId
     );
 
 }

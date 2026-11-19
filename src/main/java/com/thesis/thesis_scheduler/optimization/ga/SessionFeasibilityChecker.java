@@ -1,11 +1,6 @@
 package com.thesis.thesis_scheduler.optimization.ga;
 
-import com.thesis.thesis_scheduler.optimization.constraint.InstructorAvailabilityConstraint;
-import com.thesis.thesis_scheduler.optimization.constraint.InstructorConflictConstraint;
-import com.thesis.thesis_scheduler.optimization.constraint.RoomAvailabilityConstraint;
-import com.thesis.thesis_scheduler.optimization.constraint.RoomCapacityConstraint;
-import com.thesis.thesis_scheduler.optimization.constraint.RoomConflictConstraint;
-import com.thesis.thesis_scheduler.optimization.constraint.SectionConflictConstraint;
+import com.thesis.thesis_scheduler.optimization.constraint.*;
 import com.thesis.thesis_scheduler.optimization.model.ScheduleChromosome;
 import com.thesis.thesis_scheduler.optimization.model.ScheduleGene;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +14,7 @@ import java.util.List;
 public class SessionFeasibilityChecker {
 
     private final InstructorAvailabilityConstraint instructorAvailabilityConstraint;
+    private final RoomClassificationConstraint roomClassificationConstraint;
     private final RoomAvailabilityConstraint roomAvailabilityConstraint;
     private final InstructorConflictConstraint instructorConflictConstraint;
     private final SectionConflictConstraint sectionConflictConstraint;
@@ -73,6 +69,8 @@ public class SessionFeasibilityChecker {
                 && !roomConflictConstraint
                 .hasConflict(candidate)
                 && !roomCapacityConstraint
-                .hasConflict(candidate, roomCapacityLookup);
+                .hasConflict(candidate, roomCapacityLookup)
+                && !roomClassificationConstraint
+                .hasConflict(candidate);
     }
 }

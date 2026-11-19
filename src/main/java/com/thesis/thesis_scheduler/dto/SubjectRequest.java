@@ -21,6 +21,8 @@ public class SubjectRequest {
     @Size(max = 30)
     private String subjectCode;
 
+    private Long requiredLaboratoryClassificationId;
+
     @NotBlank
     @Size(max = 150)
     private String subjectName;

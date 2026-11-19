@@ -117,9 +117,9 @@ public class InstructorAvailabilityServiceImpl
     }
 
     private void validateDayOfWeek(Short dayOfWeek) {
-        if (dayOfWeek == null || dayOfWeek < 1 || dayOfWeek > 6) {
+        if (dayOfWeek == null || dayOfWeek < 1 || dayOfWeek > 7) {
             throw new IllegalArgumentException(
-                    "Day of week must be between 1 (Monday) and 6 (Saturday)."
+                    "Day of week must be between 1 (Monday) and 7 (Sunday)."
             );
         }
     }

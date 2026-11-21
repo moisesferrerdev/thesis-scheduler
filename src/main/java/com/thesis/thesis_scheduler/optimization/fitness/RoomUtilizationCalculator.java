@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -26,7 +27,34 @@ public class RoomUtilizationCalculator {
 
     private final StudentSectionRepository studentSectionRepository;
 
+    /**
+     * Existing method retained for compatibility.
+     *
+     * Throws an exception when a section exceeds room capacity.
+     */
     public double calculateRoomUtilization(
+            ScheduleChromosome chromosome) {
+
+        OptionalDouble result =
+                calculateRoomUtilizationIfValid(chromosome);
+
+        if (result.isEmpty()) {
+            throw new IllegalStateException(
+                    "Room utilization cannot be calculated because "
+                            + "one or more sections exceed room capacity.");
+        }
+
+        return result.getAsDouble();
+    }
+
+    /**
+     * Calculates RP only when every scheduled section fits
+     * within its assigned room.
+     *
+     * An empty result means RP is unavailable for this candidate.
+     * It does not mean that RP is zero.
+     */
+    public OptionalDouble calculateRoomUtilizationIfValid(
             ScheduleChromosome chromosome) {
 
         if (chromosome == null || chromosome.getGenes() == null) {
@@ -109,11 +137,20 @@ public class RoomUtilizationCalculator {
                                 + section.getSectionId());
             }
 
+            /*
+             * The existing RP formula is:
+             *
+             * RP = Sum(1 - studentCount / roomCapacity)
+             *
+             * If studentCount exceeds capacity, this formula
+             * produces a negative value. FitnessCalculator
+             * correctly rejects negative objective metrics.
+             *
+             * Therefore, RP is marked unavailable for this
+             * candidate instead of inventing a replacement value.
+             */
             if (studentCount > capacity) {
-                throw new IllegalStateException(
-                        "Section size exceeds room capacity. Section ID: "
-                                + section.getSectionId()
-                                + ", Room ID: " + room.getRoomId());
+                return OptionalDouble.empty();
             }
 
             double utilizationPenalty =
@@ -122,7 +159,7 @@ public class RoomUtilizationCalculator {
             roomUtilizationPenalty += utilizationPenalty;
         }
 
-        return roomUtilizationPenalty;
+        return OptionalDouble.of(roomUtilizationPenalty);
     }
 
     private void validateResources(

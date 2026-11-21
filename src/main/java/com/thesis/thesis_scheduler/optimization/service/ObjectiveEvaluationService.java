@@ -4,6 +4,7 @@ package com.thesis.thesis_scheduler.optimization.service;
 import com.thesis.thesis_scheduler.optimization.constraint.ConstraintEvaluator;
 import com.thesis.thesis_scheduler.optimization.constraint.RoomCapacityConstraint;
 import com.thesis.thesis_scheduler.optimization.fitness.FitnessCalculator;
+import com.thesis.thesis_scheduler.optimization.fitness.FullTimeFacultyPrioritizationEvaluator;
 import com.thesis.thesis_scheduler.optimization.fitness.MediumConstraintEvaluationService;
 import com.thesis.thesis_scheduler.optimization.fitness.PreferredRoomAssignmentEvaluator;
 import com.thesis.thesis_scheduler.optimization.fitness.PreferredTeachingScheduleEvaluator;
@@ -12,13 +13,15 @@ import com.thesis.thesis_scheduler.optimization.fitness.SoftConstraintEvaluation
 import com.thesis.thesis_scheduler.optimization.fitness.WorkloadBalanceCalculator;
 import com.thesis.thesis_scheduler.optimization.model.ConstraintViolation;
 import com.thesis.thesis_scheduler.optimization.model.ScheduleChromosome;
-import com.thesis.thesis_scheduler.optimization.fitness.FullTimeFacultyPrioritizationEvaluator;
 
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalDouble;
 
 @Service
 @RequiredArgsConstructor
@@ -43,27 +46,14 @@ public class ObjectiveEvaluationService {
             Map<Long, FullTimeFacultyPrioritizationEvaluator.AssignmentPriorityAssessment> mc2Assessments,
             FitnessCalculator.ObjectiveWeights weights) {
 
-        if (chromosome == null) {
-            throw new IllegalArgumentException(
-                    "Schedule chromosome must not be null.");
-        }
+        validateInputs(chromosome, termId, capacityLookup, weights);
 
-        if (termId == null) {
-            throw new IllegalArgumentException(
-                    "Academic term ID must not be null.");
-        }
-
-        if (capacityLookup == null) {
-            throw new IllegalArgumentException(
-                    "Room capacity lookup must not be null.");
-        }
-
-        if (weights == null) {
-            throw new IllegalArgumentException(
-                    "Objective weights must not be null.");
-        }
-
-        // 1. Evaluate hard constraints.
+        /*
+         * 1. Evaluate hard constraints.
+         *
+         * Hard-constraint feasibility is independent from
+         * whether the other objective metrics can be calculated.
+         */
         List<ConstraintViolation> hardViolations =
                 constraintEvaluator.evaluate(
                         chromosome,
@@ -71,32 +61,18 @@ public class ObjectiveEvaluationService {
                         capacityLookup
                 );
 
+        boolean feasible = hardViolations.isEmpty();
+
         int hardConstraintCount = hardViolations.size();
 
-        // 2. Reject infeasible chromosomes before calculating
-        // the remaining objective metrics.
-        if (hardConstraintCount > 0) {
-
-            double cv = 100.0 * hardConstraintCount;
-
-            FitnessCalculator.ObjectiveMetrics metrics =
-                    new FitnessCalculator.ObjectiveMetrics(
-                            cv,
-                            0.0,
-                            0.0,
-                            0.0
-                    );
-
-            return new EvaluationResult(
-                    false,
-                    hardViolations,
-                    metrics,
-                    Double.POSITIVE_INFINITY,
-                    0.0
-            );
-        }
-
-        // 3. Evaluate medium constraints (MC2).
+        /*
+         * 2. Evaluate medium constraints.
+         *
+         * CV = 100(HC) + 10(MC)
+         *
+         * This is calculated for both feasible and infeasible
+         * candidates.
+         */
         var mediumResult =
                 mediumConstraintEvaluationService.evaluate(
                         chromosome,
@@ -106,24 +82,43 @@ public class ObjectiveEvaluationService {
         int mediumConstraintCount =
                 mediumResult.mediumConstraintViolations();
 
-        // 4. Calculate constraint violations.
         double cv =
                 (100.0 * hardConstraintCount)
                         + (10.0 * mediumConstraintCount);
 
-        // 5. Calculate workload balance (WB).
+        /*
+         * 3. Calculate workload balance.
+         *
+         * This calculation is independent of hard-constraint
+         * feasibility, provided the chromosome contains valid
+         * instructor and timeslot references.
+         */
         double wb =
                 workloadBalanceCalculator.calculateWorkloadBalance(
                         chromosome
                 );
 
-        // 6. Calculate room utilization penalty (RP).
-        double rp =
-                roomUtilizationCalculator.calculateRoomUtilization(
+        /*
+         * 4. Calculate room utilization.
+         *
+         * RP is unavailable when a section exceeds room capacity.
+         * We do not substitute zero or invent another penalty.
+         */
+        OptionalDouble rpResult =
+                roomUtilizationCalculator.calculateRoomUtilizationIfValid(
                         chromosome
                 );
 
-        // 7. Evaluate soft constraints (SP).
+        Double rp = rpResult.isPresent()
+                ? rpResult.getAsDouble()
+                : null;
+
+        /*
+         * 5. Evaluate soft constraints.
+         *
+         * Soft constraints are evaluated even when hard violations
+         * exist, so the final candidate retains its research metrics.
+         */
         var softResult =
                 softConstraintEvaluationService.evaluate(
                         chromosome,
@@ -136,7 +131,45 @@ public class ObjectiveEvaluationService {
 
         double sp = softResult.totalPenalty();
 
-        // 8. Build the four objective metrics.
+        /*
+         * 6. Retain every individually calculated metric.
+         *
+         * A null RP explicitly means unavailable, not zero.
+         */
+        MetricValues metricValues = new MetricValues(
+                cv,
+                wb,
+                rp,
+                sp
+        );
+
+        List<String> unavailableMetrics = new ArrayList<>();
+
+        if (rp == null) {
+            unavailableMetrics.add("RP");
+        }
+
+        /*
+         * 7. Calculate the overall objective and fitness only
+         * when all four objective metrics are available.
+         *
+         * The existing FitnessCalculator formula and weights
+         * remain unchanged.
+         */
+        if (!unavailableMetrics.isEmpty()) {
+
+            return new EvaluationResult(
+                    feasible,
+                    hardViolations,
+                    metricValues,
+                    null,  // metrics
+                    null,  // objectiveValue
+                    null,  // fitness
+                    false, // metricsComplete
+                    unavailableMetrics
+            );
+        }
+
         FitnessCalculator.ObjectiveMetrics metrics =
                 new FitnessCalculator.ObjectiveMetrics(
                         cv,
@@ -145,7 +178,6 @@ public class ObjectiveEvaluationService {
                         sp
                 );
 
-        // 9. Calculate objective value and fitness.
         double objectiveValue =
                 fitnessCalculator.calculateObjectiveValue(
                         metrics,
@@ -159,20 +191,139 @@ public class ObjectiveEvaluationService {
                 );
 
         return new EvaluationResult(
-                true,
+                feasible,
                 hardViolations,
+                metricValues,
                 metrics,
                 objectiveValue,
-                fitness
+                fitness,
+                true,
+                List.of()
         );
     }
 
+    private void validateInputs(
+            ScheduleChromosome chromosome,
+            Long termId,
+            RoomCapacityConstraint.CapacityLookup capacityLookup,
+            FitnessCalculator.ObjectiveWeights weights) {
+
+        if (chromosome == null) {
+            throw new IllegalArgumentException(
+                    "Schedule chromosome must not be null.");
+        }
+
+        if (chromosome.getGenes() == null
+                || chromosome.getGenes().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Schedule chromosome must contain genes.");
+        }
+
+        if (termId == null || termId <= 0) {
+            throw new IllegalArgumentException(
+                    "Academic term ID must be a positive value.");
+        }
+
+        if (capacityLookup == null) {
+            throw new IllegalArgumentException(
+                    "Room capacity lookup must not be null.");
+        }
+
+        if (weights == null) {
+            throw new IllegalArgumentException(
+                    "Objective weights must not be null.");
+        }
+    }
+
+    /**
+     * Holds the individually calculated objective metrics.
+     *
+     * A null value means that the metric could not be calculated.
+     * It must never be interpreted as a measured zero.
+     */
+    public record MetricValues(
+            Double cv,
+            Double wb,
+            Double rp,
+            Double sp
+    ) {
+    }
+
+    /**
+     * Represents the complete evaluation of one candidate.
+     *
+     * metrics, objectiveValue, and fitness are unavailable
+     * when one or more objective metrics could not be calculated.
+     *
+     * Feasibility is determined only by hard-constraint violations.
+     */
     public record EvaluationResult(
             boolean feasible,
             List<ConstraintViolation> hardViolations,
+            MetricValues metricValues,
             FitnessCalculator.ObjectiveMetrics metrics,
-            double objectiveValue,
-            double fitness
+            Double objectiveValue,
+            Double fitness,
+            boolean metricsComplete,
+            List<String> unavailableMetrics
     ) {
+
+        public EvaluationResult {
+            hardViolations = hardViolations == null
+                    ? List.of()
+                    : List.copyOf(hardViolations);
+
+            unavailableMetrics = unavailableMetrics == null
+                    ? List.of()
+                    : List.copyOf(unavailableMetrics);
+
+            if (metricValues == null) {
+                throw new IllegalArgumentException(
+                        "Metric values must not be null.");
+            }
+
+            if (feasible && !hardViolations.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "A feasible candidate cannot contain hard violations.");
+            }
+
+            if (!feasible && hardViolations.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "An infeasible candidate must contain hard violations.");
+            }
+
+            if (metricsComplete) {
+
+                if (metrics == null
+                        || objectiveValue == null
+                        || fitness == null
+                        || !unavailableMetrics.isEmpty()) {
+
+                    throw new IllegalArgumentException(
+                            "Complete metrics require objective metrics, "
+                                    + "objective value, and fitness.");
+                }
+
+                if (!Double.isFinite(objectiveValue)
+                        || !Double.isFinite(fitness)
+                        || fitness < 0.0
+                        || fitness > 1.0) {
+
+                    throw new IllegalArgumentException(
+                            "Objective value and fitness must be finite "
+                                    + "and fitness must be between 0 and 1.");
+                }
+
+            } else if (metrics != null
+                    || objectiveValue != null
+                    || fitness != null
+                    || unavailableMetrics.isEmpty()) {
+
+                throw new IllegalArgumentException(
+                        "Incomplete metrics must identify unavailable metrics "
+                                + "and must not contain an overall objective "
+                                + "value or fitness.");
+            }
+        }
     }
 }

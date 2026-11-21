@@ -2,23 +2,21 @@
 package com.thesis.thesis_scheduler.optimization.service;
 
 import com.thesis.thesis_scheduler.entity.GeneratedSchedule;
+import com.thesis.thesis_scheduler.entity.GeneratedScheduleEntry;
 import com.thesis.thesis_scheduler.entity.OptimizationRun;
-import com.thesis.thesis_scheduler.entity.ScheduleEntry;
-import com.thesis.thesis_scheduler.entity.ScheduleVersion;
-import com.thesis.thesis_scheduler.entity.TeachingAssignment;
 import com.thesis.thesis_scheduler.entity.Room;
+import com.thesis.thesis_scheduler.entity.TeachingAssignment;
 import com.thesis.thesis_scheduler.entity.Timeslot;
 
 import com.thesis.thesis_scheduler.optimization.ga.GeneticAlgorithmOptimizer;
 import com.thesis.thesis_scheduler.optimization.model.ScheduleChromosome;
 import com.thesis.thesis_scheduler.optimization.model.ScheduleGene;
 
+import com.thesis.thesis_scheduler.repository.GeneratedScheduleEntryRepository;
 import com.thesis.thesis_scheduler.repository.GeneratedScheduleRepository;
 import com.thesis.thesis_scheduler.repository.OptimizationRunRepository;
-import com.thesis.thesis_scheduler.repository.ScheduleVersionRepository;
-import com.thesis.thesis_scheduler.repository.ScheduleEntryRepository;
-import com.thesis.thesis_scheduler.repository.TeachingAssignmentRepository;
 import com.thesis.thesis_scheduler.repository.RoomRepository;
+import com.thesis.thesis_scheduler.repository.TeachingAssignmentRepository;
 import com.thesis.thesis_scheduler.repository.TimeslotRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -36,15 +34,24 @@ public class OptimizationResultPersistenceService {
 
     private final OptimizationRunRepository optimizationRunRepository;
     private final GeneratedScheduleRepository generatedScheduleRepository;
-    private final ScheduleVersionRepository scheduleVersionRepository;
-    private final ScheduleEntryRepository scheduleEntryRepository;
+    private final GeneratedScheduleEntryRepository generatedScheduleEntryRepository;
 
     private final TeachingAssignmentRepository teachingAssignmentRepository;
     private final RoomRepository roomRepository;
     private final TimeslotRepository timeslotRepository;
 
+    /**
+     * Persists every candidate from the final evaluated population.
+     *
+     * Feasible and infeasible candidates are both retained.
+     * Only candidates with complete objective metrics receive
+     * an overall fitness score.
+     *
+     * Candidate persistence does not create ScheduleVersion
+     * or ScheduleEntry records.
+     */
     @Transactional
-    public GeneratedSchedule saveBestResult(
+    public List<GeneratedSchedule> saveBestResult(
             Long optimizationRunId,
             GeneticAlgorithmOptimizer.OptimizationResult result) {
 
@@ -54,113 +61,162 @@ public class OptimizationResultPersistenceService {
             );
         }
 
-        ScheduleChromosome chromosome = result.bestChromosome();
-
-        if (chromosome == null || chromosome.getGenes() == null
-                || chromosome.getGenes().isEmpty()) {
+        if (result.finalPopulation() == null
+                || result.finalPopulation().isEmpty()) {
             throw new IllegalStateException(
-                    "The optimizer returned an empty schedule."
+                    "The optimizer returned an empty final population."
             );
         }
 
-        var evaluation = result.evaluation();
-
-        if (evaluation == null) {
-            throw new IllegalStateException(
-                    "Optimization evaluation result is missing."
-            );
-        }
-
-        // 1. Retrieve the optimization run.
         OptimizationRun optimizationRun = optimizationRunRepository
                 .findById(optimizationRunId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Optimization run not found: " + optimizationRunId
                 ));
 
-        // 2. Save the generated schedule.
-        GeneratedSchedule generatedSchedule = new GeneratedSchedule();
+        List<GeneratedSchedule> savedCandidates = new ArrayList<>();
 
-        generatedSchedule.setOptimizationRun(optimizationRun);
-        generatedSchedule.setCandidateNumber(1);
-        generatedSchedule.setFitnessScore(
-                BigDecimal.valueOf(evaluation.fitness())
-        );
-        generatedSchedule.setHardConstraintViolations(
-                evaluation.hardViolations().size()
-        );
-        generatedSchedule.setSoftConstraintPenalty(
-                BigDecimal.valueOf(evaluation.metrics().sp())
-        );
-        generatedSchedule.setFeasible(evaluation.feasible());
+        int candidateNumber = 1;
 
-        GeneratedSchedule savedSchedule =
-                generatedScheduleRepository.save(generatedSchedule);
+        for (var evaluatedCandidate : result.finalPopulation()) {
 
-        // 3. Create the first immutable schedule version.
-        ScheduleVersion scheduleVersion = new ScheduleVersion();
-
-        scheduleVersion.setGeneratedSchedule(savedSchedule);
-        scheduleVersion.setParentVersion(null);
-        scheduleVersion.setVersionNumber(1);
-        scheduleVersion.setVersionType("OPTIMIZED");
-        scheduleVersion.setVersionStatus("GENERATED");
-        scheduleVersion.setChangeSummary(
-                "Initial schedule generated by the Genetic Algorithm."
-        );
-        scheduleVersion.setCreatedBy("SYSTEM");
-
-        ScheduleVersion savedVersion =
-                scheduleVersionRepository.save(scheduleVersion);
-
-        // 4. Convert chromosome genes into schedule entries.
-        List<ScheduleEntry> entries = new ArrayList<>();
-
-        for (ScheduleGene gene : chromosome.getGenes()) {
-
-            if (gene == null
-                    || gene.getTeachingAssignmentId() == null
-                    || gene.getRoomId() == null
-                    || gene.getTimeslotId() == null) {
+            if (evaluatedCandidate == null
+                    || evaluatedCandidate.chromosome() == null
+                    || evaluatedCandidate.evaluation() == null) {
 
                 throw new IllegalStateException(
-                        "Schedule gene contains missing resource IDs."
+                        "Final population contains an incomplete evaluated candidate."
                 );
             }
 
-            TeachingAssignment assignment =
-                    teachingAssignmentRepository
-                            .findById(gene.getTeachingAssignmentId())
-                            .orElseThrow(() -> new IllegalStateException(
-                                    "Teaching assignment not found: "
-                                            + gene.getTeachingAssignmentId()
-                            ));
+            ScheduleChromosome chromosome =
+                    evaluatedCandidate.chromosome();
 
-            Room room = roomRepository
-                    .findById(gene.getRoomId())
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Room not found: " + gene.getRoomId()
-                    ));
+            var evaluation = evaluatedCandidate.evaluation();
 
-            Timeslot timeslot = timeslotRepository
-                    .findById(gene.getTimeslotId())
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Timeslot not found: " + gene.getTimeslotId()
-                    ));
+            validateChromosome(chromosome);
 
-            ScheduleEntry entry = new ScheduleEntry();
+            /*
+             * 1. Create the candidate record.
+             */
+            GeneratedSchedule generatedSchedule =
+                    new GeneratedSchedule();
 
-            entry.setScheduleVersion(savedVersion);
-            entry.setAssignment(assignment);
-            entry.setRoom(room);
-            entry.setTimeslot(timeslot);
+            generatedSchedule.setOptimizationRun(optimizationRun);
+            generatedSchedule.setCandidateNumber(candidateNumber);
 
-            entries.add(entry);
+            generatedSchedule.setHardConstraintViolations(
+                    evaluation.hardViolations().size()
+            );
+
+            generatedSchedule.setFeasible(evaluation.feasible());
+
+            /*
+             * Fitness is available only when all objective
+             * metrics were successfully calculated.
+             */
+            if (evaluation.metricsComplete()
+                    && evaluation.fitness() != null) {
+
+                generatedSchedule.setFitnessScore(
+                        BigDecimal.valueOf(evaluation.fitness())
+                );
+
+            } else {
+                generatedSchedule.setFitnessScore(null);
+            }
+
+            /*
+             * Preserve the calculated soft-constraint penalty
+             * even when another metric, such as RP, is unavailable.
+             */
+            Double softPenalty = evaluation.metricValues().sp();
+
+            generatedSchedule.setSoftConstraintPenalty(
+                    softPenalty == null
+                            ? null
+                            : BigDecimal.valueOf(softPenalty)
+            );
+
+            GeneratedSchedule savedSchedule =
+                    generatedScheduleRepository.save(generatedSchedule);
+
+            /*
+             * 2. Convert this candidate's genes into snapshot entries.
+             */
+            List<GeneratedScheduleEntry> entries =
+                    new ArrayList<>();
+
+            for (ScheduleGene gene : chromosome.getGenes()) {
+
+                validateGene(gene);
+
+                TeachingAssignment assignment =
+                        teachingAssignmentRepository
+                                .findById(gene.getTeachingAssignmentId())
+                                .orElseThrow(() -> new IllegalStateException(
+                                        "Teaching assignment not found: "
+                                                + gene.getTeachingAssignmentId()
+                                ));
+
+                Room room = roomRepository
+                        .findById(gene.getRoomId())
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Room not found: " + gene.getRoomId()
+                        ));
+
+                Timeslot timeslot = timeslotRepository
+                        .findById(gene.getTimeslotId())
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Timeslot not found: " + gene.getTimeslotId()
+                        ));
+
+                GeneratedScheduleEntry entry =
+                        new GeneratedScheduleEntry();
+
+                entry.setGeneratedSchedule(savedSchedule);
+                entry.setAssignment(assignment);
+                entry.setRoom(room);
+                entry.setTimeslot(timeslot);
+                entry.setSessionType(gene.getSessionType());
+
+                entries.add(entry);
+            }
+
+            generatedScheduleEntryRepository.saveAll(entries);
+
+            savedCandidates.add(savedSchedule);
+
+            candidateNumber++;
         }
 
-        // 5. Save all schedule entries.
-        scheduleEntryRepository.saveAll(entries);
+        return savedCandidates;
+    }
 
-        return savedSchedule;
+    private void validateChromosome(
+            ScheduleChromosome chromosome) {
+
+        if (chromosome.getGenes() == null
+                || chromosome.getGenes().isEmpty()) {
+
+            throw new IllegalStateException(
+                    "Candidate chromosome must contain schedule genes."
+            );
+        }
+    }
+
+    private void validateGene(ScheduleGene gene) {
+
+        if (gene == null
+                || gene.getTeachingAssignmentId() == null
+                || gene.getRoomId() == null
+                || gene.getTimeslotId() == null
+                || gene.getSessionType() == null
+                || gene.getSessionType().isBlank()) {
+
+            throw new IllegalStateException(
+                    "Candidate gene contains missing required schedule data."
+            );
+        }
     }
 }

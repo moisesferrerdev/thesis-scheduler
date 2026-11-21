@@ -1,4 +1,3 @@
-
 package com.thesis.thesis_scheduler.optimization.ga;
 
 import com.thesis.thesis_scheduler.entity.Room;
@@ -26,11 +25,12 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class GeneticAlgorithmOptimizer {
 
+    private static final int MAX_OFFSPRING_ATTEMPTS_MULTIPLIER = 20;
+
     private final InitialPopulationGenerator initialPopulationGenerator;
     private final TournamentSelectionOperator tournamentSelectionOperator;
     private final ScheduleCrossoverOperator scheduleCrossoverOperator;
     private final ScheduleMutationOperator scheduleMutationOperator;
-    private final CompleteScheduleValidator completeScheduleValidator;
     private final ObjectiveEvaluationService objectiveEvaluationService;
 
     public OptimizationResult optimize(
@@ -60,24 +60,31 @@ public class GeneticAlgorithmOptimizer {
                 targetFitness
         );
 
-        // Generate the initial population.
-        List<ScheduleChromosome> population =
+        // 1. Generate the initial population.
+        List<ScheduleChromosome> initialPopulation =
                 initialPopulationGenerator.generatePopulation(
                         termId,
                         populationSize
                 );
 
-        // Load scheduling resources.
+        if (initialPopulation == null || initialPopulation.isEmpty()) {
+            throw new IllegalStateException(
+                    "Initial population generator returned no candidates."
+            );
+        }
+
+        // 2. Load scheduling resources.
         InitialPopulationGenerator.SchedulingResources resources =
                 initialPopulationGenerator.loadResources(termId);
 
         List<Room> availableRooms = resources.rooms();
         List<Timeslot> availableTimeslots = resources.timeslots();
 
-        // Evaluate the initial population.
-        List<TournamentSelectionOperator.EvaluatedCandidate> evaluatedPopulation =
+        // 3. Evaluate every candidate in the initial population.
+        List<TournamentSelectionOperator.EvaluatedCandidate>
+                finalEvaluatedPopulation =
                 evaluatePopulation(
-                        population,
+                        initialPopulation,
                         termId,
                         capacityLookup,
                         instructorPreferences,
@@ -89,12 +96,38 @@ public class GeneticAlgorithmOptimizer {
                         weights
                 );
 
+        /*
+         * The working population contains feasible candidates only.
+         * Infeasible candidates remain in finalEvaluatedPopulation
+         * for research and persistence.
+         */
+        List<TournamentSelectionOperator.EvaluatedCandidate>
+                evaluatedPopulation =
+                getFeasibleCandidates(finalEvaluatedPopulation);
+
         TournamentSelectionOperator.EvaluatedCandidate bestCandidate =
-                getBestCandidate(evaluatedPopulation);
+                getBestCandidateOrNull(evaluatedPopulation);
 
         int completedGenerations = 0;
 
-        // Evolution process.
+        /*
+         * If the initial population has no feasible candidate,
+         * the optimizer cannot safely perform parent selection.
+         *
+         * Return the evaluated initial population so that it can
+         * still be persisted and inspected for research.
+         */
+        if (evaluatedPopulation.isEmpty()) {
+            return new OptimizationResult(
+                    null,
+                    null,
+                    finalEvaluatedPopulation,
+                    completedGenerations,
+                    finalEvaluatedPopulation.size()
+            );
+        }
+
+        // 4. Evolution process.
         for (int generation = 1;
              generation <= maxGenerations;
              generation++) {
@@ -103,15 +136,50 @@ public class GeneticAlgorithmOptimizer {
                 break;
             }
 
-            List<TournamentSelectionOperator.EvaluatedCandidate> nextGeneration =
+            /*
+             * This list represents every candidate evaluated
+             * for the current generation.
+             *
+             * It includes the elite candidate and all evaluated
+             * offspring, including infeasible offspring.
+             */
+            List<TournamentSelectionOperator.EvaluatedCandidate>
+                    nextEvaluatedPopulation =
                     new ArrayList<>();
 
-            // Elitism: preserve the best candidate.
-            nextGeneration.add(bestCandidate);
+            /*
+             * This list is used by the GA for the next generation.
+             * It contains feasible candidates only.
+             */
+            List<TournamentSelectionOperator.EvaluatedCandidate>
+                    nextFeasiblePopulation =
+                    new ArrayList<>();
 
-            while (nextGeneration.size() < populationSize) {
+            // 5. Elitism: retain the best feasible candidate.
+            nextEvaluatedPopulation.add(bestCandidate);
+            nextFeasiblePopulation.add(bestCandidate);
 
-                // Select parents using tournament selection.
+            int offspringAttempts = 0;
+
+            int maximumOffspringAttempts =
+                    populationSize * MAX_OFFSPRING_ATTEMPTS_MULTIPLIER;
+
+            /*
+             * Generate and evaluate offspring.
+             *
+             * We stop when:
+             * - The evaluated generation reaches populationSize, or
+             * - The maximum number of attempts is reached.
+             *
+             * This prevents an endless loop when the GA repeatedly
+             * produces infeasible offspring.
+             */
+            while (nextEvaluatedPopulation.size() < populationSize
+                    && offspringAttempts < maximumOffspringAttempts) {
+
+                offspringAttempts++;
+
+                // 6. Select feasible parents only.
                 ScheduleChromosome parent1 =
                         tournamentSelectionOperator.selectParent(
                                 evaluatedPopulation,
@@ -126,7 +194,7 @@ public class GeneticAlgorithmOptimizer {
 
                 ScheduleChromosome offspring;
 
-                // Crossover.
+                // 7. Crossover.
                 if (Math.random() < crossoverRate) {
                     offspring = scheduleCrossoverOperator.crossover(
                             parent1,
@@ -136,7 +204,7 @@ public class GeneticAlgorithmOptimizer {
                     offspring = copyChromosome(parent1);
                 }
 
-                // Mutation.
+                // 8. Mutation.
                 offspring = scheduleMutationOperator.mutate(
                         offspring,
                         availableTimeslots,
@@ -144,18 +212,12 @@ public class GeneticAlgorithmOptimizer {
                         mutationRate
                 );
 
-                // Validate offspring.
-                CompleteScheduleValidator.ValidationResult validationResult =
-                        completeScheduleValidator.validate(
-                                offspring,
-                                termId
-                        );
-
-                if (!validationResult.feasible()) {
-                    continue;
-                }
-
-                // Evaluate offspring.
+                /*
+                 * 9. Evaluate every offspring.
+                 *
+                 * ObjectiveEvaluationService now returns finite
+                 * metrics for infeasible candidates too.
+                 */
                 EvaluationResult evaluation =
                         objectiveEvaluationService.evaluate(
                                 offspring,
@@ -170,52 +232,85 @@ public class GeneticAlgorithmOptimizer {
                                 weights
                         );
 
-                if (evaluation.feasible()) {
-                    nextGeneration.add(
-                            new TournamentSelectionOperator.EvaluatedCandidate(
-                                    offspring,
-                                    evaluation
-                            )
-                    );
+                TournamentSelectionOperator.EvaluatedCandidate
+                        evaluatedCandidate =
+                        new TournamentSelectionOperator.EvaluatedCandidate(
+                                offspring,
+                                evaluation
+                        );
+
+                // Retain every evaluated offspring.
+                nextEvaluatedPopulation.add(evaluatedCandidate);
+
+                // Only feasible candidates enter the working population.
+                if (isEligibleForEvolution(evaluatedCandidate)) {
+                    nextFeasiblePopulation.add(evaluatedCandidate);
                 }
             }
 
-            // Maintain the required population size.
-            while (nextGeneration.size() < populationSize) {
-
-                nextGeneration.addAll(evaluatedPopulation);
-
-                if (nextGeneration.size() > populationSize) {
-                    nextGeneration = new ArrayList<>(
-                            nextGeneration.subList(0, populationSize)
+            /*
+             * The elite candidate guarantees that the next feasible
+             * population contains at least one feasible candidate.
+             *
+             * Refill the working population by reusing feasible
+             * candidates if not enough feasible offspring were found.
+             */
+            List<TournamentSelectionOperator.EvaluatedCandidate>
+                    nextWorkingPopulation =
+                    refillWorkingPopulation(
+                            nextFeasiblePopulation,
+                            populationSize
                     );
-                }
-            }
 
-            evaluatedPopulation = nextGeneration;
+            // 10. Replace the working population.
+            evaluatedPopulation = nextWorkingPopulation;
 
-            // Find the best candidate in this generation.
+            // 11. Update the best feasible candidate.
             TournamentSelectionOperator.EvaluatedCandidate generationBest =
-                    getBestCandidate(evaluatedPopulation);
+                    getBestCandidateOrNull(evaluatedPopulation);
 
-            if (generationBest.evaluation().fitness()
+            if (generationBest != null
+                    && generationBest.evaluation().fitness()
                     > bestCandidate.evaluation().fitness()) {
 
                 bestCandidate = generationBest;
             }
 
+            /*
+             * Preserve the complete evaluated generation.
+             * This becomes the final population if the algorithm
+             * terminates after this generation.
+             */
+            finalEvaluatedPopulation =
+                    List.copyOf(nextEvaluatedPopulation);
+
             completedGenerations = generation;
+
+            /*
+             * If the attempt limit was reached, the generation may
+             * contain fewer candidates than the configured population.
+             * We retain what was actually evaluated instead of
+             * pretending that the target population size was reached.
+             */
+            if (offspringAttempts >= maximumOffspringAttempts
+                    && nextEvaluatedPopulation.size() < populationSize) {
+                break;
+            }
         }
 
+        // 12. Return the best feasible candidate and the complete
+        // final evaluated population.
         return new OptimizationResult(
                 bestCandidate.chromosome(),
                 bestCandidate.evaluation(),
+                finalEvaluatedPopulation,
                 completedGenerations,
-                evaluatedPopulation.size()
+                finalEvaluatedPopulation.size()
         );
     }
 
-    private List<TournamentSelectionOperator.EvaluatedCandidate> evaluatePopulation(
+    private List<TournamentSelectionOperator.EvaluatedCandidate>
+    evaluatePopulation(
             List<ScheduleChromosome> population,
             Long termId,
             RoomCapacityConstraint.CapacityLookup capacityLookup,
@@ -228,18 +323,15 @@ public class GeneticAlgorithmOptimizer {
             ObjectiveWeights weights
     ) {
 
-        List<TournamentSelectionOperator.EvaluatedCandidate> evaluatedCandidates =
+        List<TournamentSelectionOperator.EvaluatedCandidate>
+                evaluatedCandidates =
                 new ArrayList<>();
 
         for (ScheduleChromosome chromosome : population) {
 
-            CompleteScheduleValidator.ValidationResult validationResult =
-                    completeScheduleValidator.validate(
-                            chromosome,
-                            termId
-                    );
-
-            if (!validationResult.feasible()) {
+            if (chromosome == null
+                    || chromosome.getGenes() == null
+                    || chromosome.getGenes().isEmpty()) {
                 continue;
             }
 
@@ -257,36 +349,80 @@ public class GeneticAlgorithmOptimizer {
                             weights
                     );
 
-            if (evaluation.feasible()) {
-                evaluatedCandidates.add(
-                        new TournamentSelectionOperator.EvaluatedCandidate(
-                                chromosome,
-                                evaluation
-                        )
-                );
-            }
+            evaluatedCandidates.add(
+                    new TournamentSelectionOperator.EvaluatedCandidate(
+                            chromosome,
+                            evaluation
+                    )
+            );
         }
 
         if (evaluatedCandidates.isEmpty()) {
             throw new IllegalStateException(
-                    "No feasible candidates were found in the initial population."
+                    "No structurally valid candidates could be evaluated."
             );
         }
 
         return evaluatedCandidates;
     }
 
-    private TournamentSelectionOperator.EvaluatedCandidate getBestCandidate(
-            List<TournamentSelectionOperator.EvaluatedCandidate> candidates
-    ) {
+    private List<TournamentSelectionOperator.EvaluatedCandidate>
+    getFeasibleCandidates(
+            List<TournamentSelectionOperator.EvaluatedCandidate> candidates) {
 
         return candidates.stream()
+                .filter(this::isEligibleForEvolution)
+                .toList();
+    }
+
+    private List<TournamentSelectionOperator.EvaluatedCandidate>
+    refillWorkingPopulation(
+            List<TournamentSelectionOperator.EvaluatedCandidate> feasibleCandidates,
+            int requiredSize
+    ) {
+
+        if (feasibleCandidates == null || feasibleCandidates.isEmpty()) {
+            throw new IllegalStateException(
+                    "Cannot create a working population without feasible candidates."
+            );
+        }
+
+        List<TournamentSelectionOperator.EvaluatedCandidate> result =
+                new ArrayList<>(feasibleCandidates);
+
+        int index = 0;
+
+        while (result.size() < requiredSize) {
+            result.add(
+                    feasibleCandidates.get(index % feasibleCandidates.size())
+            );
+
+            index++;
+        }
+
+        if (result.size() > requiredSize) {
+            return new ArrayList<>(
+                    result.subList(0, requiredSize)
+            );
+        }
+
+        return result;
+    }
+
+    private TournamentSelectionOperator.EvaluatedCandidate
+    getBestCandidateOrNull(
+            List<TournamentSelectionOperator.EvaluatedCandidate> candidates) {
+
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+
+        return candidates.stream()
+                .filter(this::isEligibleForEvolution)
                 .max(Comparator.comparingDouble(
                         candidate -> candidate.evaluation().fitness()
                 ))
-                .orElseThrow(() -> new IllegalStateException(
-                        "No evaluated candidates are available."
-                ));
+                .orElse(null);
     }
 
     private ScheduleChromosome copyChromosome(
@@ -363,8 +499,50 @@ public class GeneticAlgorithmOptimizer {
     public record OptimizationResult(
             ScheduleChromosome bestChromosome,
             EvaluationResult evaluation,
+            List<TournamentSelectionOperator.EvaluatedCandidate> finalPopulation,
             int completedGenerations,
             int finalPopulationSize
     ) {
+
+        public OptimizationResult {
+            if (finalPopulation == null || finalPopulation.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Final evaluated population must not be empty."
+                );
+            }
+
+            finalPopulation = List.copyOf(finalPopulation);
+
+            if (finalPopulationSize != finalPopulation.size()) {
+                finalPopulationSize = finalPopulation.size();
+            }
+
+            if ((bestChromosome == null) != (evaluation == null)) {
+                throw new IllegalArgumentException(
+                        "Best chromosome and its evaluation must either both be present or both be null."
+                );
+            }
+
+            if (evaluation != null && !evaluation.feasible()) {
+                throw new IllegalArgumentException(
+                        "Best candidate must be feasible."
+                );
+            }
+        }
+    }
+
+    private boolean isEligibleForEvolution(
+            TournamentSelectionOperator.EvaluatedCandidate candidate) {
+
+        if (candidate == null || candidate.evaluation() == null) {
+            return false;
+        }
+
+        EvaluationResult evaluation = candidate.evaluation();
+
+        return evaluation.feasible()
+                && evaluation.metricsComplete()
+                && evaluation.fitness() != null
+                && Double.isFinite(evaluation.fitness());
     }
 }

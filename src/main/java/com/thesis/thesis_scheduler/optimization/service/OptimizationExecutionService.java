@@ -1,4 +1,3 @@
-
 package com.thesis.thesis_scheduler.optimization.service;
 
 import com.thesis.thesis_scheduler.dto.OptimizationRunRequest;
@@ -8,9 +7,9 @@ import com.thesis.thesis_scheduler.optimization.ga.GeneticAlgorithmOptimizer;
 import com.thesis.thesis_scheduler.optimization.service.OptimizationSettingsResolver.ResolvedOptimizationSettings;
 import com.thesis.thesis_scheduler.repository.AcademicTermRepository;
 import com.thesis.thesis_scheduler.repository.OptimizationRunRepository;
-import lombok.extern.slf4j.Slf4j;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +30,6 @@ public class OptimizationExecutionService {
 
     private final AcademicTermRepository academicTermRepository;
     private final OptimizationRunRepository optimizationRunRepository;
-
     private final OptimizationDataProvider optimizationDataProvider;
     private final OptimizationSettingsResolver optimizationSettingsResolver;
     private final OptimizationWorkerService optimizationWorkerService;
@@ -46,24 +44,20 @@ public class OptimizationExecutionService {
             );
         }
 
-        // 1. Retrieve academic term.
         AcademicTerm term = academicTermRepository
                 .findById(request.getTermId())
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Academic term not found: " + request.getTermId()
                 ));
 
-        // 2. Resolve optimization settings.
         ResolvedOptimizationSettings settings =
                 optimizationSettingsResolver.resolve(
                         request.getAdvancedSettings()
                 );
 
-        // 3. Prepare optimization inputs.
         OptimizationDataProvider.OptimizationInput input =
                 optimizationDataProvider.prepare(request.getTermId());
 
-        // 4. Create optimization run.
         OptimizationRun optimizationRun = new OptimizationRun();
 
         optimizationRun.setTerm(term);
@@ -81,25 +75,19 @@ public class OptimizationExecutionService {
 
         Long runId = savedRun.getOptimizationRunId();
 
-        // 5. Launch optimization only after the transaction commits.
+        // Start asynchronous execution only after the RUNNING record commits.
         TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization() {
 
                     @Override
                     public void afterCommit() {
-                        executeAndPersist(
-                                runId,
-                                request,
-                                settings,
-                                input
-                        );
+                        executeAndPersist(runId, request, settings, input);
                     }
                 }
         );
 
         return savedRun;
     }
-
 
     private void executeAndPersist(
             Long runId,
@@ -109,18 +97,18 @@ public class OptimizationExecutionService {
 
         try {
 
-            CompletableFuture<GeneticAlgorithmOptimizer.OptimizationResult>
-                    future = optimizationWorkerService.executeOptimization(
-                    request.getTermId(),
-                    request.getPopulationSize(),
-                    request.getGenerationLimit(),
-                    request.getCrossoverRate(),
-                    request.getMutationRate(),
-                    settings,
-                    input.instructorPreferences(),
-                    input.roomPreferences(),
-                    input.mc2Assessments()
-            );
+            CompletableFuture<GeneticAlgorithmOptimizer.OptimizationResult> future =
+                    optimizationWorkerService.executeOptimization(
+                            request.getTermId(),
+                            request.getPopulationSize(),
+                            request.getGenerationLimit(),
+                            request.getCrossoverRate(),
+                            request.getMutationRate(),
+                            settings,
+                            input.instructorPreferences(),
+                            input.roomPreferences(),
+                            input.mc2Assessments()
+                    );
 
             future.whenComplete((result, throwable) -> {
 
@@ -132,7 +120,11 @@ public class OptimizationExecutionService {
                             throwable
                     );
 
-                    updateRunStatus(runId, STATUS_FAILED);
+                    markRunAsFailed(
+                            runId,
+                            "GENETIC_ALGORITHM_EXECUTION"
+                    );
+
                     return;
                 }
 
@@ -143,7 +135,11 @@ public class OptimizationExecutionService {
                             runId
                     );
 
-                    updateRunStatus(runId, STATUS_FAILED);
+                    markRunAsFailed(
+                            runId,
+                            "GENETIC_ALGORITHM_EXECUTION"
+                    );
+
                     return;
                 }
 
@@ -166,12 +162,15 @@ public class OptimizationExecutionService {
                 } catch (RuntimeException exception) {
 
                     log.error(
-                            "Failed to persist optimization result. Run ID: {}",
+                            "Failed to persist or complete optimization run. Run ID: {}",
                             runId,
                             exception
                     );
 
-                    updateRunStatus(runId, STATUS_FAILED);
+                    markRunAsFailed(
+                            runId,
+                            "CANDIDATE_PERSISTENCE"
+                    );
                 }
             });
 
@@ -183,10 +182,12 @@ public class OptimizationExecutionService {
                     exception
             );
 
-            updateRunStatus(runId, STATUS_FAILED);
+            markRunAsFailed(
+                    runId,
+                    "EXECUTION_START"
+            );
         }
     }
-
 
     private void updateRunStatus(Long runId, String status) {
 
@@ -200,5 +201,22 @@ public class OptimizationExecutionService {
         run.setCompletedAt(OffsetDateTime.now());
 
         optimizationRunRepository.save(run);
+    }
+
+    private void markRunAsFailed(Long runId, String stage) {
+
+        try {
+
+            updateRunStatus(runId, STATUS_FAILED);
+
+        } catch (RuntimeException exception) {
+
+            log.error(
+                    "Failed to update optimization run status. Run ID: {}, Stage: {}",
+                    runId,
+                    stage,
+                    exception
+            );
+        }
     }
 }

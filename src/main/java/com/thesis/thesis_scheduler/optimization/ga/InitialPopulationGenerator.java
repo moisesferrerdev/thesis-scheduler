@@ -27,9 +27,6 @@ public class InitialPopulationGenerator {
     private final TeachingAssignmentRepository
             teachingAssignmentRepository;
 
-    private final CompleteScheduleValidator
-            completeScheduleValidator;
-
     private final RoomRepository roomRepository;
 
     private final TimeslotRepository timeslotRepository;
@@ -106,12 +103,14 @@ public class InitialPopulationGenerator {
                 continue;
             }
 
-            CompleteScheduleValidator.ValidationResult validationResult =
-                    completeScheduleValidator.validate(chromosome, termId);
-
-            if (validationResult.feasible()) {
-                population.add(chromosome);
-            }
+            /*
+             * Retain structurally complete candidates.
+             *
+             * Do not reject a candidate here because of hard-constraint
+             * violations. ObjectiveEvaluationService evaluates feasibility
+             * and objective metrics during GA evaluation.
+             */
+            population.add(chromosome);
         }
 
         if (population.size() < populationSize) {
@@ -119,9 +118,10 @@ public class InitialPopulationGenerator {
                     "Unable to generate the requested initial population. "
                             + "Generated " + population.size()
                             + " out of " + populationSize
-                            + " candidate schedules. "
+                            + " structurally complete candidate schedules. "
                             + "Check instructor availability, room availability, "
-                            + "timeslots, teaching assignments, and constraints."
+                            + "timeslots, teaching assignments, and placement "
+                            + "constraints."
             );
         }
 

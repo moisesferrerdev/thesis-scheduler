@@ -1,5 +1,6 @@
 package com.thesis.thesis_scheduler.mapper;
 
+import com.thesis.thesis_scheduler.dto.CandidateEvaluationResponse;
 import com.thesis.thesis_scheduler.dto.GeneratedScheduleRequest;
 import com.thesis.thesis_scheduler.dto.GeneratedScheduleResponse;
 import com.thesis.thesis_scheduler.entity.GeneratedSchedule;
@@ -23,7 +24,12 @@ public interface GeneratedScheduleMapper {
             target = "optimizationRunId",
             source = "optimizationRun.optimizationRunId"
     )
+    @Mapping(target = "evaluation", source = ".")
     GeneratedScheduleResponse toResponse(GeneratedSchedule entity);
+
+    CandidateEvaluationResponse toEvaluationResponse(
+            GeneratedSchedule entity
+    );
 
     @Mapping(target = "generatedScheduleId", ignore = true)
     @Mapping(target = "optimizationRun", ignore = true)

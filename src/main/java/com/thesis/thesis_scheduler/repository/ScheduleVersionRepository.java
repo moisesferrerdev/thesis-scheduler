@@ -26,4 +26,15 @@ public interface ScheduleVersionRepository
     );
 
     List<ScheduleVersion> findByVersionStatus(String versionStatus);
+
+    List<ScheduleVersion>
+    findByOfficialSchedule_OfficialScheduleIdOrderByVersionNumberAsc(
+            Long officialScheduleId
+    );
+
+    Optional<ScheduleVersion>
+    findByOfficialSchedule_OfficialScheduleIdAndVersionNumber(
+            Long officialScheduleId,
+            Integer versionNumber
+    );
 }

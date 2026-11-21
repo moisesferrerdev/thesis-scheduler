@@ -3,6 +3,7 @@ package com.thesis.thesis_scheduler.optimization.service;
 
 import com.thesis.thesis_scheduler.entity.GeneratedSchedule;
 import com.thesis.thesis_scheduler.entity.GeneratedScheduleEntry;
+import com.thesis.thesis_scheduler.entity.OptimizationGeneration;
 import com.thesis.thesis_scheduler.entity.OptimizationRun;
 import com.thesis.thesis_scheduler.entity.Room;
 import com.thesis.thesis_scheduler.entity.TeachingAssignment;
@@ -14,6 +15,7 @@ import com.thesis.thesis_scheduler.optimization.model.ScheduleGene;
 
 import com.thesis.thesis_scheduler.repository.GeneratedScheduleEntryRepository;
 import com.thesis.thesis_scheduler.repository.GeneratedScheduleRepository;
+import com.thesis.thesis_scheduler.repository.OptimizationGenerationRepository;
 import com.thesis.thesis_scheduler.repository.OptimizationRunRepository;
 import com.thesis.thesis_scheduler.repository.RoomRepository;
 import com.thesis.thesis_scheduler.repository.TeachingAssignmentRepository;
@@ -33,19 +35,23 @@ import java.util.List;
 public class OptimizationResultPersistenceService {
 
     private final OptimizationRunRepository optimizationRunRepository;
+
     private final GeneratedScheduleRepository generatedScheduleRepository;
     private final GeneratedScheduleEntryRepository generatedScheduleEntryRepository;
+
+    private final OptimizationGenerationRepository optimizationGenerationRepository;
 
     private final TeachingAssignmentRepository teachingAssignmentRepository;
     private final RoomRepository roomRepository;
     private final TimeslotRepository timeslotRepository;
 
     /**
-     * Persists every candidate from the final evaluated population.
+     * Persists:
+     * 1. Generation history for the optimization run.
+     * 2. Every candidate from the final evaluated population.
+     * 3. The schedule entries belonging to each candidate.
      *
      * Feasible and infeasible candidates are both retained.
-     * Only candidates with complete objective metrics receive
-     * an overall fitness score.
      *
      * Candidate persistence does not create ScheduleVersion
      * or ScheduleEntry records.
@@ -68,11 +74,26 @@ public class OptimizationResultPersistenceService {
             );
         }
 
+        if (result.generationHistory() == null
+                || result.generationHistory().isEmpty()) {
+            throw new IllegalStateException(
+                    "The optimizer returned no generation history."
+            );
+        }
+
         OptimizationRun optimizationRun = optimizationRunRepository
                 .findById(optimizationRunId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Optimization run not found: " + optimizationRunId
                 ));
+
+        /*
+         * Persist generation history first.
+         *
+         * This and candidate persistence share the same transaction.
+         * If candidate persistence fails, generation history rolls back too.
+         */
+        saveGenerationHistory(optimizationRun, result);
 
         List<GeneratedSchedule> savedCandidates = new ArrayList<>();
 
@@ -191,6 +212,57 @@ public class OptimizationResultPersistenceService {
         }
 
         return savedCandidates;
+    }
+
+    /**
+     * Saves one aggregate metrics record for each evaluated generation.
+     */
+    private void saveGenerationHistory(
+            OptimizationRun optimizationRun,
+            GeneticAlgorithmOptimizer.OptimizationResult result) {
+
+        List<OptimizationGeneration> generations =
+                new ArrayList<>();
+
+        for (GeneticAlgorithmOptimizer.GenerationSnapshot snapshot
+                : result.generationHistory()) {
+
+            if (snapshot == null) {
+                throw new IllegalStateException(
+                        "Generation history contains a null snapshot."
+                );
+            }
+
+            OptimizationGeneration generation =
+                    new OptimizationGeneration();
+
+            generation.setOptimizationRun(optimizationRun);
+            generation.setGenerationNumber(snapshot.generationNumber());
+
+            generation.setBestFitness(
+                    snapshot.bestFitness() == null
+                            ? null
+                            : BigDecimal.valueOf(snapshot.bestFitness())
+            );
+
+            generation.setAverageFitness(
+                    snapshot.averageFitness() == null
+                            ? null
+                            : BigDecimal.valueOf(snapshot.averageFitness())
+            );
+
+            generation.setFeasibleCandidateCount(
+                    snapshot.feasibleCandidateCount()
+            );
+
+            generation.setEvaluatedCandidateCount(
+                    snapshot.evaluatedCandidateCount()
+            );
+
+            generations.add(generation);
+        }
+
+        optimizationGenerationRepository.saveAll(generations);
     }
 
     private void validateChromosome(

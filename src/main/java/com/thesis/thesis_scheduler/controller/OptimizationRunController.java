@@ -2,9 +2,11 @@
 package com.thesis.thesis_scheduler.controller;
 
 import com.thesis.thesis_scheduler.dto.GeneratedScheduleResponse;
+import com.thesis.thesis_scheduler.dto.OptimizationGenerationResponse;
 import com.thesis.thesis_scheduler.dto.OptimizationRunRequest;
 import com.thesis.thesis_scheduler.dto.OptimizationRunResponse;
 import com.thesis.thesis_scheduler.service.GeneratedScheduleService;
+import com.thesis.thesis_scheduler.service.OptimizationGenerationService;
 import com.thesis.thesis_scheduler.service.OptimizationRunService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OptimizationRunController {
 
+    private final OptimizationGenerationService generationService;
     private final GeneratedScheduleService generatedScheduleService;
     private final OptimizationRunService service;
 
@@ -31,6 +34,15 @@ public class OptimizationRunController {
         return ResponseEntity
                 .status(HttpStatus.ACCEPTED)
                 .body(response);
+    }
+
+    @GetMapping("/{id}/generations")
+    public ResponseEntity<List<OptimizationGenerationResponse>> getGenerations(
+            @PathVariable Long id) {
+
+        return ResponseEntity.ok(
+                generationService.getByOptimizationRunId(id)
+        );
     }
 
     @GetMapping("/{id}")

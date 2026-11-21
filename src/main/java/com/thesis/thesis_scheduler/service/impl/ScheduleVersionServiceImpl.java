@@ -5,18 +5,22 @@ import com.thesis.thesis_scheduler.dto.ManualScheduleEntryRequest;
 import com.thesis.thesis_scheduler.dto.ManualScheduleVersionRequest;
 import com.thesis.thesis_scheduler.dto.ScheduleVersionRequest;
 import com.thesis.thesis_scheduler.dto.ScheduleVersionResponse;
+
 import com.thesis.thesis_scheduler.entity.*;
 import com.thesis.thesis_scheduler.mapper.ScheduleVersionMapper;
 import com.thesis.thesis_scheduler.repository.*;
 import com.thesis.thesis_scheduler.service.ScheduleVersionService;
-import jakarta.persistence.EntityNotFoundException;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import com.thesis.thesis_scheduler.optimization.ga.CompleteScheduleValidator;
 import com.thesis.thesis_scheduler.optimization.model.ScheduleChromosome;
 import com.thesis.thesis_scheduler.optimization.model.ScheduleGene;
+
+import jakarta.persistence.EntityNotFoundException;
+
+import lombok.RequiredArgsConstructor;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -27,80 +31,137 @@ import java.util.*;
 public class ScheduleVersionServiceImpl implements ScheduleVersionService {
 
     private final CompleteScheduleValidator completeScheduleValidator;
+
     private final ScheduleEntryRepository scheduleEntryRepository;
     private final TeachingAssignmentRepository teachingAssignmentRepository;
     private final RoomRepository roomRepository;
     private final TimeslotRepository timeslotRepository;
+
     private final ScheduleVersionRepository repository;
     private final GeneratedScheduleRepository generatedScheduleRepository;
+    private final OfficialScheduleRepository officialScheduleRepository;
+
     private final ScheduleVersionMapper mapper;
 
+    /*
+     * Generic creation is disabled.
+     *
+     * The initial schedule version must be created through
+     * OfficialScheduleService.createFromCandidate().
+     *
+     * This ensures that candidate feasibility, academic term ownership,
+     * and initial schedule-entry copying are validated consistently.
+     */
     @Override
     public ScheduleVersionResponse create(ScheduleVersionRequest request) {
-        ScheduleVersion entity = mapper.toEntity(request);
 
-        entity.setGeneratedSchedule(
-                generatedScheduleRepository.findById(
-                                request.getGeneratedScheduleId())
-                        .orElseThrow(() -> new EntityNotFoundException(
-                                "Generated schedule not found: "
-                                        + request.getGeneratedScheduleId())));
-
-        if (request.getParentVersionId() != null) {
-            entity.setParentVersion(
-                    repository.findById(request.getParentVersionId())
-                            .orElseThrow(() -> new EntityNotFoundException(
-                                    "Parent schedule version not found: "
-                                            + request.getParentVersionId())));
-        }
-
-        return mapper.toResponse(repository.save(entity));
+        throw new UnsupportedOperationException(
+                "Schedule versions cannot be created directly. "
+                        + "Create an official schedule from a feasible "
+                        + "generated candidate instead."
+        );
     }
 
     @Override
     @Transactional(readOnly = true)
     public ScheduleVersionResponse getById(Long id) {
+
         return mapper.toResponse(findById(id));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ScheduleVersionResponse> getAll() {
-        return repository.findAll().stream()
+
+        return repository.findAll()
+                .stream()
                 .map(mapper::toResponse)
                 .toList();
     }
 
+    /*
+     * Schedule versions are immutable.
+     * Changes must create a new version.
+     */
     @Override
     public ScheduleVersionResponse update(
-            Long id, ScheduleVersionRequest request) {
+            Long id,
+            ScheduleVersionRequest request) {
+
         findById(id);
+
         throw new UnsupportedOperationException(
-                "Schedule versions are immutable. Create a new version instead.");
+                "Schedule versions are immutable. "
+                        + "Create a new version instead."
+        );
     }
 
+    /*
+     * Schedule versions cannot be deleted through this service.
+     */
     @Override
     public void delete(Long id) {
+
         findById(id);
+
         throw new UnsupportedOperationException(
-                "Schedule versions cannot be deleted through this service.");
+                "Schedule versions cannot be deleted through this service."
+        );
     }
 
     private ScheduleVersion findById(Long id) {
+
+        if (id == null || id <= 0) {
+            throw new IllegalArgumentException(
+                    "Schedule version ID must be positive."
+            );
+        }
+
         return repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "Schedule version not found: " + id));
+                        "Schedule version not found: " + id
+                ));
     }
 
-
-
-
+    /*
+     * Creates a new immutable schedule version from a manual revision.
+     *
+     * The new version:
+     * - Belongs to the same OfficialSchedule as its parent.
+     * - Retains the original GeneratedSchedule as provenance.
+     * - References its parent version.
+     * - Contains a new set of ScheduleEntry records.
+     * - Becomes the OfficialSchedule's current version.
+     *
+     * The parent version and its entries are never overwritten.
+     */
     @Override
-    @Transactional
     public ScheduleVersionResponse createManualVersion(
             ManualScheduleVersionRequest request) {
 
-        // 1. Retrieve the parent version.
+        if (request == null) {
+            throw new IllegalArgumentException(
+                    "Manual schedule version request is required."
+            );
+        }
+
+        if (request.getParentVersionId() == null
+                || request.getParentVersionId() <= 0) {
+
+            throw new IllegalArgumentException(
+                    "Parent schedule version ID must be positive."
+            );
+        }
+
+        if (request.getEntries() == null
+                || request.getEntries().isEmpty()) {
+
+            throw new IllegalArgumentException(
+                    "Manual schedule entries are required."
+            );
+        }
+
+        // 1. Retrieve the parent schedule version.
         ScheduleVersion parentVersion =
                 repository.findById(request.getParentVersionId())
                         .orElseThrow(() -> new EntityNotFoundException(
@@ -108,22 +169,47 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                                         + request.getParentVersionId()
                         ));
 
-        // 2. Retrieve the academic term.
-        Long termId = parentVersion.getGeneratedSchedule()
-                .getOptimizationRun()
-                .getTerm()
-                .getTermId();
+        // 2. Retrieve the official schedule.
+        OfficialSchedule officialSchedule =
+                parentVersion.getOfficialSchedule();
 
-        // 3. Prepare genes, entries, and scheduled-hour tracking.
+        if (officialSchedule == null) {
+            throw new IllegalStateException(
+                    "The parent schedule version is not associated "
+                            + "with an official schedule."
+            );
+        }
+
+        // 3. Retrieve the original generated candidate.
+        GeneratedSchedule generatedSchedule =
+                parentVersion.getGeneratedSchedule();
+
+        if (generatedSchedule == null) {
+            throw new IllegalStateException(
+                    "The parent schedule version has no source "
+                            + "generated candidate."
+            );
+        }
+
+        // 4. Retrieve the academic term from the official schedule.
+        Long termId = officialSchedule.getTerm().getTermId();
+
+        // 5. Prepare genes, entries, and scheduled-hour tracking.
         List<ScheduleGene> genes = new ArrayList<>();
         List<ScheduleEntry> entries = new ArrayList<>();
 
-        // SectionSubject ID -> Session type -> Timeslot ID -> Duration.
+        /*
+         * SectionSubject ID -> Session type -> Timeslot ID -> Duration.
+         *
+         * This prevents duplicate timeslot duration counting
+         * for the same SectionSubject and session type.
+         */
         Map<Long, Map<String, Map<Long, Integer>>>
                 scheduledMinutesBySectionSubject = new HashMap<>();
 
         for (ManualScheduleEntryRequest entryRequest : request.getEntries()) {
 
+            // Retrieve teaching assignment.
             TeachingAssignment assignment =
                     teachingAssignmentRepository.findById(
                             entryRequest.getAssignmentId()
@@ -132,27 +218,32 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                                     + entryRequest.getAssignmentId()
                     ));
 
+            // Retrieve room.
             Room room = roomRepository.findById(
                     entryRequest.getRoomId()
             ).orElseThrow(() -> new EntityNotFoundException(
                     "Room not found: " + entryRequest.getRoomId()
             ));
 
+            // Retrieve timeslot.
             Timeslot timeslot = timeslotRepository.findById(
                     entryRequest.getTimeslotId()
             ).orElseThrow(() -> new EntityNotFoundException(
                     "Timeslot not found: " + entryRequest.getTimeslotId()
             ));
 
+            // Validate session type.
             String sessionType = entryRequest.getSessionType();
 
             if (!"LECTURE".equals(sessionType)
                     && !"LABORATORY".equals(sessionType)) {
+
                 throw new IllegalArgumentException(
                         "Invalid session type: " + sessionType
                 );
             }
 
+            // Validate teaching assignment relationships.
             if (assignment.getInstructor() == null
                     || assignment.getSectionSubject() == null
                     || assignment.getSectionSubject().getSection() == null) {
@@ -163,6 +254,7 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                 );
             }
 
+            // Validate timeslot duration.
             if (timeslot.getDurationMinutes() == null
                     || timeslot.getDurationMinutes() <= 0) {
 
@@ -172,7 +264,8 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                 );
             }
 
-            SectionSubject sectionSubject = assignment.getSectionSubject();
+            SectionSubject sectionSubject =
+                    assignment.getSectionSubject();
 
             // Build gene for hard-constraint validation.
             ScheduleGene gene = new ScheduleGene(
@@ -202,8 +295,9 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                             timeslot.getDurationMinutes()
                     );
 
-            // Prepare schedule entry.
+            // Prepare a new schedule entry.
             ScheduleEntry entry = new ScheduleEntry();
+
             entry.setAssignment(assignment);
             entry.setRoom(room);
             entry.setTimeslot(timeslot);
@@ -212,9 +306,11 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             entries.add(entry);
         }
 
-        // 4. Validate active teaching assignment completeness.
+        // 6. Validate active teaching assignment completeness.
         List<TeachingAssignment> requiredAssignments =
-                teachingAssignmentRepository.findActiveAssignmentsByTermId(termId);
+                teachingAssignmentRepository.findActiveAssignmentsByTermId(
+                        termId
+                );
 
         Set<Long> requiredAssignmentIds = new LinkedHashSet<>();
 
@@ -225,7 +321,9 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
         Set<Long> submittedAssignmentIds = new LinkedHashSet<>();
 
         for (ScheduleGene gene : genes) {
-            submittedAssignmentIds.add(gene.getTeachingAssignmentId());
+            submittedAssignmentIds.add(
+                    gene.getTeachingAssignmentId()
+            );
         }
 
         Set<Long> missingAssignmentIds =
@@ -250,12 +348,13 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             );
         }
 
-        // 5. Validate lecture and laboratory hours separately.
+        // 7. Validate lecture and laboratory hours separately.
         Set<Long> validatedSectionSubjectIds = new HashSet<>();
 
         for (TeachingAssignment assignment : requiredAssignments) {
 
-            SectionSubject sectionSubject = assignment.getSectionSubject();
+            SectionSubject sectionSubject =
+                    assignment.getSectionSubject();
 
             if (sectionSubject == null) {
                 throw new IllegalStateException(
@@ -264,7 +363,8 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                 );
             }
 
-            Long sectionSubjectId = sectionSubject.getSectionSubjectId();
+            Long sectionSubjectId =
+                    sectionSubject.getSectionSubjectId();
 
             if (!validatedSectionSubjectIds.add(sectionSubjectId)) {
                 continue;
@@ -295,7 +395,10 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
 
             // Calculate actual lecture duration.
             int actualLectureMinutes =
-                    sessionMinutes.getOrDefault("LECTURE", Map.of())
+                    sessionMinutes.getOrDefault(
+                                    "LECTURE",
+                                    Map.of()
+                            )
                             .values()
                             .stream()
                             .mapToInt(Integer::intValue)
@@ -303,7 +406,10 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
 
             // Calculate actual laboratory duration.
             int actualLabMinutes =
-                    sessionMinutes.getOrDefault("LABORATORY", Map.of())
+                    sessionMinutes.getOrDefault(
+                                    "LABORATORY",
+                                    Map.of()
+                            )
                             .values()
                             .stream()
                             .mapToInt(Integer::intValue)
@@ -340,11 +446,15 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             }
         }
 
-        // 6. Validate the complete timetable against hard constraints.
-        ScheduleChromosome chromosome = new ScheduleChromosome(genes);
+        // 8. Validate the complete timetable against hard constraints.
+        ScheduleChromosome chromosome =
+                new ScheduleChromosome(genes);
 
         CompleteScheduleValidator.ValidationResult validationResult =
-                completeScheduleValidator.validate(chromosome, termId);
+                completeScheduleValidator.validate(
+                        chromosome,
+                        termId
+                );
 
         if (!validationResult.feasible()) {
 
@@ -353,68 +463,102 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                     .map(violation ->
                             violation.getConstraintCode()
                                     + ": "
-                                    + violation.getDescription())
-                    .reduce((first, second) -> first + "; " + second)
-                    .orElse("Unknown scheduling constraint violation.");
+                                    + violation.getDescription()
+                    )
+                    .reduce(
+                            (first, second) -> first + "; " + second
+                    )
+                    .orElse(
+                            "Unknown scheduling constraint violation."
+                    );
 
             throw new IllegalArgumentException(
                     "Manual schedule revision is invalid: " + violations
             );
         }
 
-        // 7. Determine the next version number.
+        /*
+         * 9. Determine the next version number within this
+         * official schedule, not within the generated candidate.
+         */
         List<ScheduleVersion> existingVersions =
-                repository.findByGeneratedSchedule_GeneratedScheduleIdOrderByVersionNumberAsc(
-                        parentVersion.getGeneratedSchedule()
-                                .getGeneratedScheduleId()
-                );
+                repository
+                        .findByOfficialSchedule_OfficialScheduleIdOrderByVersionNumberAsc(
+                                officialSchedule.getOfficialScheduleId()
+                        );
 
         int nextVersionNumber = existingVersions.stream()
                 .mapToInt(ScheduleVersion::getVersionNumber)
                 .max()
                 .orElse(0) + 1;
 
-        // 8. Create the new immutable schedule version.
+        // 10. Create a new immutable schedule version.
         ScheduleVersion newVersion = new ScheduleVersion();
 
-        newVersion.setGeneratedSchedule(
-                parentVersion.getGeneratedSchedule()
-        );
+        // Preserve official schedule ownership.
+        newVersion.setOfficialSchedule(officialSchedule);
+
+        // Preserve original generated candidate provenance.
+        newVersion.setGeneratedSchedule(generatedSchedule);
+
+        // Preserve version lineage.
         newVersion.setParentVersion(parentVersion);
+
         newVersion.setVersionNumber(nextVersionNumber);
         newVersion.setVersionType("MANUAL");
         newVersion.setVersionStatus("GENERATED");
-        newVersion.setChangeSummary(request.getChangeSummary());
-        newVersion.setCreatedBy(request.getCreatedBy());
 
-        ScheduleVersion savedVersion = repository.save(newVersion);
+        newVersion.setChangeSummary(
+                request.getChangeSummary()
+        );
 
-        // 9. Attach all entries to the new version.
+        newVersion.setCreatedBy(
+                request.getCreatedBy()
+        );
+
+        ScheduleVersion savedVersion =
+                repository.save(newVersion);
+
+        // 11. Attach all entries to the new version.
         for (ScheduleEntry entry : entries) {
             entry.setScheduleVersion(savedVersion);
         }
 
         scheduleEntryRepository.saveAll(entries);
 
+        /*
+         * 12. Update the official schedule's current version.
+         *
+         * The previous version and its entries remain unchanged.
+         */
+        officialSchedule.setCurrentVersion(savedVersion);
+
+        officialScheduleRepository.save(officialSchedule);
+
         return mapper.toResponse(savedVersion);
     }
-
-
-
 
     @Override
     @Transactional(readOnly = true)
     public List<ScheduleVersionResponse> getByGeneratedScheduleId(
             Long generatedScheduleId) {
 
+        if (generatedScheduleId == null || generatedScheduleId <= 0) {
+            throw new IllegalArgumentException(
+                    "Generated schedule ID must be positive."
+            );
+        }
+
         if (!generatedScheduleRepository.existsById(generatedScheduleId)) {
             throw new EntityNotFoundException(
-                    "Generated schedule not found: " + generatedScheduleId);
+                    "Generated schedule not found: " + generatedScheduleId
+            );
         }
 
         return repository
                 .findByGeneratedSchedule_GeneratedScheduleIdOrderByVersionNumberAsc(
-                        generatedScheduleId)
+                        generatedScheduleId
+                )
                 .stream()
                 .map(mapper::toResponse)
                 .toList();

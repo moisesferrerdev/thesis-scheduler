@@ -13,8 +13,11 @@ import java.time.OffsetDateTime;
         name = "schedule_version",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "uk_schedule_version_schedule_version",
-                        columnNames = {"generated_schedule_id", "version_number"}
+                        name = "uk_schedule_version_official_version",
+                        columnNames = {
+                                "official_schedule_id",
+                                "version_number"
+                        }
                 )
         }
 )
@@ -28,6 +31,14 @@ public class ScheduleVersion {
     @Column(name = "schedule_version_id")
     private Long scheduleVersionId;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "official_schedule_id")
+    private OfficialSchedule officialSchedule;
+
+    /*
+     * Retained as source-candidate provenance.
+     * A manual revision continues to reference the original candidate.
+     */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "generated_schedule_id", nullable = false)
     private GeneratedSchedule generatedSchedule;

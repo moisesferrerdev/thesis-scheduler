@@ -1,3 +1,4 @@
+
 package com.thesis.thesis_scheduler.optimization.ga;
 
 import com.thesis.thesis_scheduler.entity.Room;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalDouble;
 
 @Component
 @RequiredArgsConstructor
@@ -96,6 +98,16 @@ public class GeneticAlgorithmOptimizer {
                         weights
                 );
 
+        // Generation history starts with the evaluated initial population.
+        List<GenerationSnapshot> generationHistory = new ArrayList<>();
+
+        generationHistory.add(
+                createGenerationSnapshot(
+                        0,
+                        finalEvaluatedPopulation
+                )
+        );
+
         /*
          * The working population contains feasible candidates only.
          * Infeasible candidates remain in finalEvaluatedPopulation
@@ -123,7 +135,8 @@ public class GeneticAlgorithmOptimizer {
                     null,
                     finalEvaluatedPopulation,
                     completedGenerations,
-                    finalEvaluatedPopulation.size()
+                    finalEvaluatedPopulation.size(),
+                    generationHistory
             );
         }
 
@@ -170,9 +183,6 @@ public class GeneticAlgorithmOptimizer {
              * We stop when:
              * - The evaluated generation reaches populationSize, or
              * - The maximum number of attempts is reached.
-             *
-             * This prevents an endless loop when the GA repeatedly
-             * produces infeasible offspring.
              */
             while (nextEvaluatedPopulation.size() < populationSize
                     && offspringAttempts < maximumOffspringAttempts) {
@@ -212,12 +222,7 @@ public class GeneticAlgorithmOptimizer {
                         mutationRate
                 );
 
-                /*
-                 * 9. Evaluate every offspring.
-                 *
-                 * ObjectiveEvaluationService now returns finite
-                 * metrics for infeasible candidates too.
-                 */
+                // 9. Evaluate every offspring.
                 EvaluationResult evaluation =
                         objectiveEvaluationService.evaluate(
                                 offspring,
@@ -242,7 +247,7 @@ public class GeneticAlgorithmOptimizer {
                 // Retain every evaluated offspring.
                 nextEvaluatedPopulation.add(evaluatedCandidate);
 
-                // Only feasible candidates enter the working population.
+                // Only eligible candidates enter the working population.
                 if (isEligibleForEvolution(evaluatedCandidate)) {
                     nextFeasiblePopulation.add(evaluatedCandidate);
                 }
@@ -286,11 +291,18 @@ public class GeneticAlgorithmOptimizer {
 
             completedGenerations = generation;
 
+            // Record the actual evaluated candidates for this generation.
+            generationHistory.add(
+                    createGenerationSnapshot(
+                            generation,
+                            finalEvaluatedPopulation
+                    )
+            );
+
             /*
              * If the attempt limit was reached, the generation may
              * contain fewer candidates than the configured population.
-             * We retain what was actually evaluated instead of
-             * pretending that the target population size was reached.
+             * Retain what was actually evaluated.
              */
             if (offspringAttempts >= maximumOffspringAttempts
                     && nextEvaluatedPopulation.size() < populationSize) {
@@ -298,14 +310,65 @@ public class GeneticAlgorithmOptimizer {
             }
         }
 
-        // 12. Return the best feasible candidate and the complete
-        // final evaluated population.
+        // 12. Return the best feasible candidate and complete final population.
         return new OptimizationResult(
                 bestCandidate.chromosome(),
                 bestCandidate.evaluation(),
                 finalEvaluatedPopulation,
                 completedGenerations,
-                finalEvaluatedPopulation.size()
+                finalEvaluatedPopulation.size(),
+                generationHistory
+        );
+    }
+
+    private GenerationSnapshot createGenerationSnapshot(
+            int generationNumber,
+            List<TournamentSelectionOperator.EvaluatedCandidate> candidates) {
+
+        long feasibleCandidateCount = candidates.stream()
+                .filter(candidate ->
+                        candidate != null
+                                && candidate.evaluation() != null
+                                && candidate.evaluation().feasible()
+                )
+                .count();
+
+        /*
+         * Fitness statistics are calculated only for candidates
+         * eligible for evolution:
+         * - Feasible
+         * - Complete metrics
+         * - Valid finite fitness
+         */
+        List<Double> eligibleFitnessValues = candidates.stream()
+                .filter(this::isEligibleForEvolution)
+                .map(candidate -> candidate.evaluation().fitness())
+                .toList();
+
+        Double bestFitness = eligibleFitnessValues.stream()
+                .mapToDouble(Double::doubleValue)
+                .max()
+                .isPresent()
+                ? eligibleFitnessValues.stream()
+                .mapToDouble(Double::doubleValue)
+                .max()
+                .getAsDouble()
+                : null;
+
+        OptionalDouble averageResult = eligibleFitnessValues.stream()
+                .mapToDouble(Double::doubleValue)
+                .average();
+
+        Double averageFitness = averageResult.isPresent()
+                ? averageResult.getAsDouble()
+                : null;
+
+        return new GenerationSnapshot(
+                generationNumber,
+                bestFitness,
+                averageFitness,
+                (int) feasibleCandidateCount,
+                candidates.size()
         );
     }
 
@@ -496,12 +559,22 @@ public class GeneticAlgorithmOptimizer {
         }
     }
 
+    public record GenerationSnapshot(
+            int generationNumber,
+            Double bestFitness,
+            Double averageFitness,
+            int feasibleCandidateCount,
+            int evaluatedCandidateCount
+    ) {
+    }
+
     public record OptimizationResult(
             ScheduleChromosome bestChromosome,
             EvaluationResult evaluation,
             List<TournamentSelectionOperator.EvaluatedCandidate> finalPopulation,
             int completedGenerations,
-            int finalPopulationSize
+            int finalPopulationSize,
+            List<GenerationSnapshot> generationHistory
     ) {
 
         public OptimizationResult {
@@ -528,6 +601,14 @@ public class GeneticAlgorithmOptimizer {
                         "Best candidate must be feasible."
                 );
             }
+
+            if (generationHistory == null || generationHistory.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Generation history must not be empty."
+                );
+            }
+
+            generationHistory = List.copyOf(generationHistory);
         }
     }
 

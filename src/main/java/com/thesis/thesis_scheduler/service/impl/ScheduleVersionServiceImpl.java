@@ -26,6 +26,8 @@ import java.util.*;
 @Transactional
 public class ScheduleVersionServiceImpl implements ScheduleVersionService {
 
+    private static final String STATUS_PUBLISHED = "PUBLISHED";
+
     private final CompleteScheduleValidator completeScheduleValidator;
 
     private final ScheduleEntryRepository scheduleEntryRepository;
@@ -40,11 +42,10 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
     private final ScheduleVersionMapper mapper;
 
     /*
-     * Initial schedule version creation is handled by
-     * OfficialScheduleService.createFromCandidate().
+     * Generic creation is disabled.
      *
-     * This prevents arbitrary schedule versions from being created
-     * without validating the selected generated candidate.
+     * The initial schedule version must be created through
+     * OfficialScheduleService.createFromCandidate().
      */
     @Override
     public ScheduleVersionResponse create(ScheduleVersionRequest request) {
@@ -57,116 +58,11 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
     }
 
     /*
-     * Retrieve one schedule version.
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public ScheduleVersionResponse getById(Long id) {
-
-        return mapper.toResponse(findById(id));
-    }
-
-    /*
-     * Retrieve all schedule versions.
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public List<ScheduleVersionResponse> getAll() {
-
-        return repository.findAll()
-                .stream()
-                .map(mapper::toResponse)
-                .toList();
-    }
-
-    /*
-     * Schedule versions are immutable.
-     * Updates must create a new version instead.
-     */
-    @Override
-    public ScheduleVersionResponse update(
-            Long id,
-            ScheduleVersionRequest request) {
-
-        findById(id);
-
-        throw new UnsupportedOperationException(
-                "Schedule versions are immutable. "
-                        + "Create a new version instead."
-        );
-    }
-
-    /*
-     * Schedule versions cannot be deleted independently.
-     */
-    @Override
-    public void delete(Long id) {
-
-        findById(id);
-
-        throw new UnsupportedOperationException(
-                "Schedule versions cannot be deleted through this service."
-        );
-    }
-
-    /*
-     * Retrieve a schedule version by ID.
-     */
-    private ScheduleVersion findById(Long id) {
-
-        if (id == null || id <= 0) {
-            throw new IllegalArgumentException(
-                    "Schedule version ID must be positive."
-            );
-        }
-
-        return repository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "Schedule version not found: " + id
-                ));
-    }
-
-    /*
-     * Retrieve all versions belonging to an official schedule.
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public List<ScheduleVersionResponse> getByOfficialScheduleId(
-            Long officialScheduleId) {
-
-        if (officialScheduleId == null || officialScheduleId <= 0) {
-            throw new IllegalArgumentException(
-                    "Official schedule ID must be positive."
-            );
-        }
-
-        if (!officialScheduleRepository.existsById(officialScheduleId)) {
-            throw new EntityNotFoundException(
-                    "Official schedule not found: " + officialScheduleId
-            );
-        }
-
-        return repository
-                .findByOfficialSchedule_OfficialScheduleIdOrderByVersionNumberAsc(
-                        officialScheduleId
-                )
-                .stream()
-                .map(mapper::toResponse)
-                .toList();
-    }
-
-    /*
-     * Revert an official schedule to the contents of an earlier version.
+     * Revert to a historical version.
      *
-     * A new version is created.
-     *
-     * parentVersion:
-     *     The previous current version.
-     *
-     * copiedFromVersion:
-     *     The historical version whose entries are restored.
-     *
-     * Existing versions and their entries are never modified.
+     * Reverting never overwrites an existing version.
+     * It creates a new immutable version containing copies
+     * of the historical version's schedule entries.
      */
     @Override
     public ScheduleVersionResponse revertToVersion(
@@ -188,17 +84,24 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             );
         }
 
+        // Retrieve and lock the official schedule.
         OfficialSchedule officialSchedule =
-                officialScheduleRepository.findById(officialScheduleId)
+                officialScheduleRepository.findByIdForUpdate(officialScheduleId)
                         .orElseThrow(() -> new EntityNotFoundException(
-                                "Official schedule not found: "
-                                        + officialScheduleId
+                                "Official schedule not found: " + officialScheduleId
                         ));
 
-        ScheduleVersion sourceVersion =
-                findById(request.getSourceVersionId());
+        // Published schedules must be withdrawn before reverting.
+        validateScheduleNotPublished(officialSchedule);
 
-        // Ensure the selected historical version belongs to this schedule.
+        ScheduleVersion sourceVersion =
+                repository.findById(request.getSourceVersionId())
+                        .orElseThrow(() -> new EntityNotFoundException(
+                                "Source schedule version not found: "
+                                        + request.getSourceVersionId()
+                        ));
+
+        // The source must belong to the same official schedule.
         if (sourceVersion.getOfficialSchedule() == null
                 || !officialScheduleId.equals(
                 sourceVersion.getOfficialSchedule()
@@ -227,7 +130,7 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             );
         }
 
-        // Retrieve the historical version's entries.
+        // Retrieve the exact entries from the historical version.
         List<ScheduleEntry> sourceEntries =
                 scheduleEntryRepository
                         .findByScheduleVersion_ScheduleVersionId(
@@ -240,7 +143,7 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             );
         }
 
-        // Determine the next version number for this official schedule.
+        // Determine the next chronological version number.
         List<ScheduleVersion> existingVersions =
                 repository
                         .findByOfficialSchedule_OfficialScheduleIdOrderByVersionNumberAsc(
@@ -252,17 +155,21 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                 .max()
                 .orElse(0) + 1;
 
-        // Create a new immutable version.
+        /*
+         * Create a new version.
+         *
+         * parentVersion = previous current version
+         * copiedFromVersion = historical version being restored
+         */
         ScheduleVersion revertedVersion = new ScheduleVersion();
 
         revertedVersion.setOfficialSchedule(officialSchedule);
 
-        // Preserve original generated candidate provenance.
+        // Retain original optimization candidate provenance.
         revertedVersion.setGeneratedSchedule(
                 sourceVersion.getGeneratedSchedule()
         );
 
-        // Preserve chronological and copy lineage separately.
         revertedVersion.setParentVersion(currentVersion);
         revertedVersion.setCopiedFromVersion(sourceVersion);
 
@@ -281,7 +188,7 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
         ScheduleVersion savedVersion =
                 repository.save(revertedVersion);
 
-        // Copy historical entries into the newly created version.
+        // Copy historical entries without changing original records.
         List<ScheduleEntry> copiedEntries = sourceEntries.stream()
                 .map(source -> {
                     ScheduleEntry copy = new ScheduleEntry();
@@ -298,11 +205,11 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
 
         scheduleEntryRepository.saveAll(copiedEntries);
 
-        // Supersede the previous current version.
+        // Mark the previous current version as superseded.
         currentVersion.setVersionStatus("SUPERSEDED");
         repository.save(currentVersion);
 
-        // Update the official schedule's current version.
+        // Update only the current-version reference.
         officialSchedule.setCurrentVersion(savedVersion);
         officialScheduleRepository.save(officialSchedule);
 
@@ -310,10 +217,92 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
     }
 
     /*
-     * Create a new immutable version from a manual schedule revision.
+     * Retrieve versions belonging to an official schedule.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<ScheduleVersionResponse> getByOfficialScheduleId(
+            Long officialScheduleId) {
+
+        if (officialScheduleId == null || officialScheduleId <= 0) {
+            throw new IllegalArgumentException(
+                    "Official schedule ID must be positive."
+            );
+        }
+
+        if (!officialScheduleRepository.existsById(officialScheduleId)) {
+            throw new EntityNotFoundException(
+                    "Official schedule not found: " + officialScheduleId
+            );
+        }
+
+        return repository
+                .findByOfficialSchedule_OfficialScheduleIdOrderByVersionNumberAsc(
+                        officialScheduleId
+                )
+                .stream()
+                .map(mapper::toResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ScheduleVersionResponse getById(Long id) {
+
+        return mapper.toResponse(findById(id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ScheduleVersionResponse> getAll() {
+
+        return repository.findAll()
+                .stream()
+                .map(mapper::toResponse)
+                .toList();
+    }
+
+    /*
+     * Schedule versions are immutable.
+     * Changes must create a new version.
+     */
+    @Override
+    public ScheduleVersionResponse update(
+            Long id,
+            ScheduleVersionRequest request) {
+
+        findById(id);
+
+        throw new UnsupportedOperationException(
+                "Schedule versions are immutable. "
+                        + "Create a new version instead."
+        );
+    }
+
+    /*
+     * Schedule versions cannot be deleted through this service.
+     */
+    @Override
+    public void delete(Long id) {
+
+        findById(id);
+
+        throw new UnsupportedOperationException(
+                "Schedule versions cannot be deleted through this service."
+        );
+    }
+
+    /*
+     * Creates a new immutable schedule version from a manual revision.
      *
-     * The parent version remains unchanged.
-     * A new set of ScheduleEntry records is created.
+     * The new version:
+     * - Belongs to the same OfficialSchedule as its parent.
+     * - Retains the original GeneratedSchedule as provenance.
+     * - References its parent version.
+     * - Contains a new set of ScheduleEntry records.
+     * - Becomes the OfficialSchedule's current version.
+     *
+     * The parent version and its entries are never overwritten.
      */
     @Override
     public ScheduleVersionResponse createManualVersion(
@@ -341,36 +330,49 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             );
         }
 
-        // 1. Retrieve the parent version.
+        // 1. Retrieve the parent schedule version.
         ScheduleVersion parentVersion =
-                findById(request.getParentVersionId());
+                repository.findById(request.getParentVersionId())
+                        .orElseThrow(() -> new EntityNotFoundException(
+                                "Parent schedule version not found: "
+                                        + request.getParentVersionId()
+                        ));
 
-        // 2. Retrieve its official schedule.
-        OfficialSchedule officialSchedule =
+        // 2. Retrieve and lock the official schedule.
+        OfficialSchedule parentOfficialSchedule =
                 parentVersion.getOfficialSchedule();
 
-        if (officialSchedule == null) {
+        if (parentOfficialSchedule == null) {
             throw new IllegalStateException(
                     "The parent schedule version is not associated "
                             + "with an official schedule."
             );
         }
 
-        // 3. Ensure the parent is still the current version.
-        ScheduleVersion currentVersion =
-                officialSchedule.getCurrentVersion();
+        Long officialScheduleId =
+                parentOfficialSchedule.getOfficialScheduleId();
 
-        if (currentVersion == null
-                || !currentVersion.getScheduleVersionId()
+        OfficialSchedule officialSchedule =
+                officialScheduleRepository.findByIdForUpdate(officialScheduleId)
+                        .orElseThrow(() -> new EntityNotFoundException(
+                                "Official schedule not found: " + officialScheduleId
+                        ));
+
+        // A published schedule must be withdrawn before manual editing.
+        validateScheduleNotPublished(officialSchedule);
+
+        // Ensure the submitted parent is still the current version.
+        if (officialSchedule.getCurrentVersion() == null
+                || !officialSchedule.getCurrentVersion()
+                .getScheduleVersionId()
                 .equals(parentVersion.getScheduleVersionId())) {
 
             throw new IllegalStateException(
-                    "Manual editing must be based on the current "
-                            + "official schedule version."
+                    "Manual revisions must be based on the current schedule version."
             );
         }
 
-        // 4. Retrieve the original generated candidate.
+        // 3. Retrieve the original generated candidate.
         GeneratedSchedule generatedSchedule =
                 parentVersion.getGeneratedSchedule();
 
@@ -381,30 +383,38 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             );
         }
 
-        // 5. Retrieve the academic term.
+        // 4. Retrieve the academic term from the official schedule.
+        if (officialSchedule.getTerm() == null) {
+            throw new IllegalStateException(
+                    "The official schedule has no academic term."
+            );
+        }
+
         Long termId = officialSchedule.getTerm().getTermId();
 
-        // 6. Prepare genes and schedule entries.
+        // 5. Prepare genes, entries, and scheduled-hour tracking.
         List<ScheduleGene> genes = new ArrayList<>();
         List<ScheduleEntry> entries = new ArrayList<>();
 
         /*
          * SectionSubject ID -> Session type -> Timeslot ID -> Duration.
          *
-         * Timeslot durations are counted once for each
-         * SectionSubject and session type.
+         * This prevents duplicate timeslot duration counting
+         * for the same SectionSubject and session type.
          */
         Map<Long, Map<String, Map<Long, Integer>>>
                 scheduledMinutesBySectionSubject = new HashMap<>();
 
         for (ManualScheduleEntryRequest entryRequest : request.getEntries()) {
 
-            if (entryRequest.getAssignmentId() == null
+            if (entryRequest == null
+                    || entryRequest.getAssignmentId() == null
                     || entryRequest.getRoomId() == null
                     || entryRequest.getTimeslotId() == null) {
 
                 throw new IllegalArgumentException(
-                        "Assignment ID, room ID, and timeslot ID are required."
+                        "Every manual schedule entry must contain "
+                                + "an assignment ID, room ID, and timeslot ID."
                 );
             }
 
@@ -442,7 +452,7 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                 );
             }
 
-            // Validate assignment relationships.
+            // Validate teaching assignment relationships.
             if (assignment.getInstructor() == null
                     || assignment.getSectionSubject() == null
                     || assignment.getSectionSubject().getSection() == null) {
@@ -466,7 +476,7 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             SectionSubject sectionSubject =
                     assignment.getSectionSubject();
 
-            // Build a gene for hard-constraint validation.
+            // Build gene for hard-constraint validation.
             ScheduleGene gene = new ScheduleGene(
                     assignment.getAssignmentId(),
                     assignment.getInstructor().getInstructorId(),
@@ -476,9 +486,10 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             );
 
             gene.setSessionType(sessionType);
+
             genes.add(gene);
 
-            // Track unique timeslots by SectionSubject and session type.
+            // Track unique timeslots by subject and session type.
             scheduledMinutesBySectionSubject
                     .computeIfAbsent(
                             sectionSubject.getSectionSubjectId(),
@@ -504,7 +515,7 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             entries.add(entry);
         }
 
-        // 7. Validate active teaching assignment completeness.
+        // 6. Validate active teaching assignment completeness.
         List<TeachingAssignment> requiredAssignments =
                 teachingAssignmentRepository.findActiveAssignmentsByTermId(
                         termId
@@ -546,7 +557,7 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             );
         }
 
-        // 8. Validate lecture and laboratory hours separately.
+        // 7. Validate lecture and laboratory hours separately.
         Set<Long> validatedSectionSubjectIds = new HashSet<>();
 
         for (TeachingAssignment assignment : requiredAssignments) {
@@ -591,6 +602,7 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                             Map.of()
                     );
 
+            // Calculate actual lecture duration in minutes.
             int actualLectureMinutes =
                     sessionMinutes.getOrDefault(
                                     "LECTURE",
@@ -601,6 +613,7 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                             .mapToInt(Integer::intValue)
                             .sum();
 
+            // Calculate actual laboratory duration in minutes.
             int actualLabMinutes =
                     sessionMinutes.getOrDefault(
                                     "LABORATORY",
@@ -611,19 +624,25 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                             .mapToInt(Integer::intValue)
                             .sum();
 
-            // Compare minutes directly to avoid decimal division rounding.
-            BigDecimal actualLectureMinutesDecimal =
-                    BigDecimal.valueOf(actualLectureMinutes);
-
+            /*
+             * Convert required hours into minutes.
+             *
+             * Compare minutes directly to avoid ArithmeticException
+             * caused by non-terminating BigDecimal division.
+             */
             BigDecimal requiredLectureMinutes =
                     requiredLectureHours.multiply(BigDecimal.valueOf(60));
-
-            BigDecimal actualLabMinutesDecimal =
-                    BigDecimal.valueOf(actualLabMinutes);
 
             BigDecimal requiredLabMinutes =
                     requiredLabHours.multiply(BigDecimal.valueOf(60));
 
+            BigDecimal actualLectureMinutesDecimal =
+                    BigDecimal.valueOf(actualLectureMinutes);
+
+            BigDecimal actualLabMinutesDecimal =
+                    BigDecimal.valueOf(actualLabMinutes);
+
+            // Validate lecture hours.
             if (actualLectureMinutesDecimal.compareTo(
                     requiredLectureMinutes) != 0) {
 
@@ -632,10 +651,16 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                                 + "SectionSubject ID: " + sectionSubjectId
                                 + ". Required: " + requiredLectureHours
                                 + " hours, Scheduled: "
-                                + actualLectureMinutes + " minutes."
+                                + actualLectureMinutesDecimal.divide(
+                                BigDecimal.valueOf(60),
+                                2,
+                                java.math.RoundingMode.HALF_UP
+                        )
+                                + " hours."
                 );
             }
 
+            // Validate laboratory hours.
             if (actualLabMinutesDecimal.compareTo(
                     requiredLabMinutes) != 0) {
 
@@ -644,12 +669,17 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                                 + "SectionSubject ID: " + sectionSubjectId
                                 + ". Required: " + requiredLabHours
                                 + " hours, Scheduled: "
-                                + actualLabMinutes + " minutes."
+                                + actualLabMinutesDecimal.divide(
+                                BigDecimal.valueOf(60),
+                                2,
+                                java.math.RoundingMode.HALF_UP
+                        )
+                                + " hours."
                 );
             }
         }
 
-        // 9. Validate the complete timetable against hard constraints.
+        // 8. Validate the complete timetable against hard constraints.
         ScheduleChromosome chromosome =
                 new ScheduleChromosome(genes);
 
@@ -680,11 +710,14 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
             );
         }
 
-        // 10. Determine the next version number within this official schedule.
+        /*
+         * 9. Determine the next version number within this
+         * official schedule, not within the generated candidate.
+         */
         List<ScheduleVersion> existingVersions =
                 repository
                         .findByOfficialSchedule_OfficialScheduleIdOrderByVersionNumberAsc(
-                                officialSchedule.getOfficialScheduleId()
+                                officialScheduleId
                         );
 
         int nextVersionNumber = existingVersions.stream()
@@ -692,19 +725,16 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                 .max()
                 .orElse(0) + 1;
 
-        // 11. Create a new immutable manual version.
+        // 10. Create a new immutable schedule version.
         ScheduleVersion newVersion = new ScheduleVersion();
 
         newVersion.setOfficialSchedule(officialSchedule);
 
-        // Preserve original candidate provenance.
+        // Preserve original generated candidate provenance.
         newVersion.setGeneratedSchedule(generatedSchedule);
 
-        // Parent is the previous current version.
+        // Preserve version lineage.
         newVersion.setParentVersion(parentVersion);
-
-        // A manual revision is based on a new submitted timetable.
-        newVersion.setCopiedFromVersion(null);
 
         newVersion.setVersionNumber(nextVersionNumber);
         newVersion.setVersionType("MANUAL");
@@ -721,18 +751,21 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
         ScheduleVersion savedVersion =
                 repository.save(newVersion);
 
-        // 12. Attach the new entries to the new version.
+        // 11. Attach all entries to the new version.
         for (ScheduleEntry entry : entries) {
             entry.setScheduleVersion(savedVersion);
         }
 
         scheduleEntryRepository.saveAll(entries);
 
-        // 13. Supersede the previous version.
+        /*
+         * 12. Update the official schedule's current version.
+         *
+         * The previous version and its entries remain unchanged.
+         */
         parentVersion.setVersionStatus("SUPERSEDED");
         repository.save(parentVersion);
 
-        // 14. Update the official schedule's current version.
         officialSchedule.setCurrentVersion(savedVersion);
         officialScheduleRepository.save(officialSchedule);
 
@@ -740,7 +773,7 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
     }
 
     /*
-     * Retrieve versions associated with a generated candidate.
+     * Retrieve versions belonging to a generated candidate.
      */
     @Override
     @Transactional(readOnly = true)
@@ -766,5 +799,40 @@ public class ScheduleVersionServiceImpl implements ScheduleVersionService {
                 .stream()
                 .map(mapper::toResponse)
                 .toList();
+    }
+
+    /*
+     * Common validation for operations that must not modify
+     * an actively published official schedule.
+     */
+    private void validateScheduleNotPublished(
+            OfficialSchedule officialSchedule) {
+
+        if (officialSchedule == null) {
+            throw new IllegalArgumentException(
+                    "Official schedule is required."
+            );
+        }
+
+        if (STATUS_PUBLISHED.equals(officialSchedule.getScheduleStatus())) {
+            throw new IllegalStateException(
+                    "The published schedule must be withdrawn before "
+                            + "modifying or reverting its current version."
+            );
+        }
+    }
+
+    private ScheduleVersion findById(Long id) {
+
+        if (id == null || id <= 0) {
+            throw new IllegalArgumentException(
+                    "Schedule version ID must be positive."
+            );
+        }
+
+        return repository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Schedule version not found: " + id
+                ));
     }
 }

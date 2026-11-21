@@ -1,12 +1,10 @@
-
 package com.thesis.thesis_scheduler.controller;
 
-import com.thesis.thesis_scheduler.dto.ScheduleEntryRequest;
 import com.thesis.thesis_scheduler.dto.ScheduleEntryResponse;
 import com.thesis.thesis_scheduler.service.ScheduleEntryService;
-import jakarta.validation.Valid;
+
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,17 +16,6 @@ import java.util.List;
 public class ScheduleEntryController {
 
     private final ScheduleEntryService service;
-
-    @PostMapping
-    public ResponseEntity<ScheduleEntryResponse> create(
-            @Valid @RequestBody ScheduleEntryRequest request) {
-
-        ScheduleEntryResponse response = service.create(request);
-
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(response);
-    }
 
     @GetMapping("/{id}")
     public ResponseEntity<ScheduleEntryResponse> getById(
@@ -44,10 +31,12 @@ public class ScheduleEntryController {
     }
 
     @GetMapping("/schedule-version/{scheduleVersionId}")
-    public ResponseEntity<List<ScheduleEntryResponse>> getByScheduleVersionId(
+    public ResponseEntity<List<ScheduleEntryResponse>>
+    getByScheduleVersionId(
             @PathVariable Long scheduleVersionId) {
 
         return ResponseEntity.ok(
-                service.getByScheduleVersionId(scheduleVersionId));
+                service.getByScheduleVersionId(scheduleVersionId)
+        );
     }
 }

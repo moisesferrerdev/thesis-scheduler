@@ -3,6 +3,7 @@ package com.thesis.thesis_scheduler.mapper;
 import com.thesis.thesis_scheduler.dto.ScheduleVersionRequest;
 import com.thesis.thesis_scheduler.dto.ScheduleVersionResponse;
 import com.thesis.thesis_scheduler.entity.ScheduleVersion;
+
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
@@ -10,13 +11,19 @@ import org.mapstruct.Mapping;
 public interface ScheduleVersionMapper {
 
     @Mapping(target = "scheduleVersionId", ignore = true)
+    @Mapping(target = "officialSchedule", ignore = true)
     @Mapping(target = "generatedSchedule", ignore = true)
     @Mapping(target = "parentVersion", ignore = true)
+    @Mapping(target = "copiedFromVersion", ignore = true)
     @Mapping(target = "versionNumber", ignore = true)
     @Mapping(target = "versionStatus", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     ScheduleVersion toEntity(ScheduleVersionRequest request);
 
+    @Mapping(
+            target = "officialScheduleId",
+            source = "officialSchedule.officialScheduleId"
+    )
     @Mapping(
             target = "generatedScheduleId",
             source = "generatedSchedule.generatedScheduleId"
@@ -24,6 +31,10 @@ public interface ScheduleVersionMapper {
     @Mapping(
             target = "parentVersionId",
             source = "parentVersion.scheduleVersionId"
+    )
+    @Mapping(
+            target = "copiedFromVersionId",
+            source = "copiedFromVersion.scheduleVersionId"
     )
     ScheduleVersionResponse toResponse(ScheduleVersion entity);
 }

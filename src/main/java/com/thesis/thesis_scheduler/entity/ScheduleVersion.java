@@ -47,6 +47,10 @@ public class ScheduleVersion {
     @JoinColumn(name = "parent_version_id")
     private ScheduleVersion parentVersion;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "copied_from_version_id")
+    private ScheduleVersion copiedFromVersion;
+
     @Column(name = "version_number", nullable = false)
     private Integer versionNumber;
 

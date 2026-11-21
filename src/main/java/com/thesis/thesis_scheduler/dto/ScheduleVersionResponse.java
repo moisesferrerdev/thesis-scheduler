@@ -15,10 +15,14 @@ public class ScheduleVersionResponse {
 
     private Long scheduleVersionId;
 
+    private Long officialScheduleId;
     private Long generatedScheduleId;
+
     private Long parentVersionId;
+    private Long copiedFromVersionId;
 
     private Integer versionNumber;
+
     private String versionType;
     private String versionStatus;
 

@@ -2,6 +2,7 @@
 package com.thesis.thesis_scheduler.controller;
 
 import com.thesis.thesis_scheduler.dto.ManualScheduleVersionRequest;
+import com.thesis.thesis_scheduler.dto.RevertScheduleVersionRequest;
 import com.thesis.thesis_scheduler.dto.ScheduleVersionRequest;
 import com.thesis.thesis_scheduler.dto.ScheduleVersionResponse;
 import com.thesis.thesis_scheduler.service.ScheduleVersionService;
@@ -19,6 +20,19 @@ import java.util.List;
 public class ScheduleVersionController {
 
     private final ScheduleVersionService service;
+
+    @PostMapping("/official-schedule/{officialScheduleId}/revert")
+    public ResponseEntity<ScheduleVersionResponse> revertToVersion(
+            @PathVariable Long officialScheduleId,
+            @Valid @RequestBody RevertScheduleVersionRequest request) {
+
+        ScheduleVersionResponse response =
+                service.revertToVersion(officialScheduleId, request);
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(response);
+    }
 
     @PostMapping
     public ResponseEntity<ScheduleVersionResponse> create(

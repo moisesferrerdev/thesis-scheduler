@@ -37,4 +37,9 @@ public interface ScheduleVersionRepository
             Long officialScheduleId,
             Integer versionNumber
     );
+
+    List<ScheduleVersion>
+    findByCopiedFromVersion_ScheduleVersionId(
+            Long copiedFromVersionId
+    );
 }
